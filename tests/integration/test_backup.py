@@ -5,7 +5,12 @@ from fastapi.testclient import TestClient
 from app.database import Database, SCHEMA_VERSION
 from app.main import create_app
 from app.services.backup_service import BackupError, export_backup, import_backup
-from app.repositories import AccountsRepository, GamesRepository, ClaimsRepository
+from app.repositories import (
+    AccountsRepository,
+    GamesRepository,
+    ClaimsRepository,
+    SettingsRepository,
+)
 from tests.fakes import FakeEpicAdapter
 
 
@@ -101,3 +106,26 @@ def test_backup_api_export_and_import(tmp_path):
         response = client.post("/api/backup/import?overwrite=true", json=payload)
         assert response.status_code == 200
         assert response.json()["restored_rows"] == 1
+
+
+def test_backup_excludes_sensitive_settings(tmp_path):
+    database = Database(str(tmp_path / "epic.db"))
+    database.initialize()
+    settings = SettingsRepository()
+    with database.connect() as connection:
+        settings.set(connection, "telegram_bot_token", "super-secret-token")
+        settings.set(connection, "telegram_chat_id", "12345")
+        settings.set(connection, "external_api_key", "api-key-secret")
+        settings.set(connection, "scheduler_interval_seconds", "7200")
+
+    with database.connect() as connection:
+        payload = export_backup(connection)
+
+    keys = {record["key"] for record in payload["tables"]["settings"]}
+    assert "telegram_bot_token" not in keys
+    assert "telegram_chat_id" not in keys
+    assert "external_api_key" not in keys
+    assert "scheduler_interval_seconds" in keys
+    payload_text = json.dumps(payload)
+    assert "super-secret-token" not in payload_text
+    assert "api-key-secret" not in payload_text

@@ -16,6 +16,8 @@ TABLES = (
     "settings",
 )
 
+SENSITIVE_SETTINGS = {"telegram_bot_token", "telegram_chat_id", "external_api_key"}
+
 
 class BackupError(ValueError):
     pass
@@ -27,7 +29,12 @@ def export_backup(connection) -> dict:
         rows = connection.execute(
             f"SELECT * FROM {table}"
         ).fetchall()
-        payload["tables"][table] = [dict(row) for row in rows]
+        records = [dict(row) for row in rows]
+        if table == "settings":
+            records = [
+                record for record in records if record["key"] not in SENSITIVE_SETTINGS
+            ]
+        payload["tables"][table] = records
     return payload
 
 

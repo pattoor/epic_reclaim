@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Callable
 
 
 @dataclass(frozen=True)
@@ -17,56 +18,73 @@ class InteractiveAuthBrowser(ABC):
     """Runs the server-side headed browser for interactive authentication."""
 
     @abstractmethod
-    def run_auth(self, profile_path: str, display: str | None, timeout_seconds: int) -> AuthOutcome:
+    def run_auth(
+        self,
+        profile_path: str,
+        display: str | None,
+        timeout_seconds: int,
+        on_intervention: Callable[[str], None] | None = None,
+    ) -> AuthOutcome:
         pass
 
 
 class PlaywrightAuthBrowser(InteractiveAuthBrowser):
     def run_auth(
-        self, profile_path: str, display: str | None, timeout_seconds: int
+        self,
+        profile_path: str,
+        display: str | None,
+        timeout_seconds: int,
+        on_intervention: Callable[[str], None] | None = None,
     ) -> AuthOutcome:
         try:
             from playwright.sync_api import sync_playwright
-
-            playwright = sync_playwright()
         except ImportError as exc:
             return AuthOutcome(success=False, error="playwright not installed")
 
         env = {}
         if display:
             env["DISPLAY"] = display
+        intervention: str | None = None
+        import time
+
         try:
-            browser = playwright.chromium.launch_persistent_context(
-                user_data_dir=profile_path,
-                headless=False,
-                env=env,
-            )
-            page = browser.pages[0] if browser.pages else browser.new_page()
-            page.goto("https://store.epicgames.com/en-US/", timeout=30000)
-            if "Sign In" in page.inner_text("body"):
-                page.goto("https://store.epicgames.com/en-US/login", timeout=30000)
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch_persistent_context(
+                    user_data_dir=profile_path,
+                    headless=False,
+                    env=env,
+                )
+                try:
+                    page = browser.pages[0] if browser.pages else browser.new_page()
+                    page.goto("https://store.epicgames.com/en-US/", timeout=30000)
+                    if "Sign In" in page.inner_text("body"):
+                        page.goto("https://store.epicgames.com/en-US/login", timeout=30000)
 
-            import time
-
-            deadline = time.monotonic() + timeout_seconds
-            while time.monotonic() < deadline:
-                time.sleep(3)
-                body = page.inner_text("body")
-                if "captcha" in body.lower() or "verify you are human" in body.lower():
-                    return AuthOutcome(success=False, needs_intervention=True, error="captcha")
-                if _is_logged_in(page):
+                    deadline = time.monotonic() + timeout_seconds
+                    while time.monotonic() < deadline:
+                        time.sleep(3)
+                        body = page.inner_text("body")
+                        lowered = body.lower()
+                        current_intervention = _intervention_kind(lowered)
+                        if current_intervention and current_intervention != intervention:
+                            intervention = current_intervention
+                            if on_intervention is not None:
+                                on_intervention(intervention)
+                        if _is_logged_in(page):
+                            return AuthOutcome(
+                                success=True,
+                                epic_identity=_extract_identity(page),
+                                display_name=None,
+                            )
                     return AuthOutcome(
-                        success=True,
-                        epic_identity=_extract_identity(page),
-                        display_name=None,
+                        success=False,
+                        needs_intervention=intervention is not None,
+                        error=intervention or "auth timeout",
                     )
+                finally:
+                    browser.close()
+        except TimeoutError:
             return AuthOutcome(success=False, error="auth timeout")
-        finally:
-            try:
-                browser.close()
-            except Exception:
-                pass
-            playwright.stop()
 
 
 def _is_logged_in(page) -> bool:
@@ -74,6 +92,14 @@ def _is_logged_in(page) -> bool:
         return page.get_by_role("button", name="Sign Out").is_visible(timeout=2000)
     except Exception:
         return False
+
+
+def _intervention_kind(body: str) -> str | None:
+    if "captcha" in body or "verify you are human" in body:
+        return "captcha"
+    if "mfa" in body or "two-factor" in body or "verification code" in body:
+        return "mfa"
+    return None
 
 
 def _extract_identity(page) -> str | None:

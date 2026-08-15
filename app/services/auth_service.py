@@ -16,7 +16,7 @@ class AuthSession:
     token: str
     account_id: int
     screen_url: str | None
-    status: str  # running | completed | failed | unavailable
+    status: str  # running | needs_intervention | completed | failed | unavailable
     error: str | None = None
     vnc_password: str | None = None
 
@@ -43,10 +43,7 @@ class AuthService:
         with self._database.connect() as connection:
             self._repository.get(connection, account_id)
 
-        if any(
-            session.account_id == account_id and session.status == "running"
-            for session in self._sessions.values()
-        ):
+        if any(session.status in {"running", "needs_intervention"} for session in self._sessions.values()):
             return AuthSession(
                 token="",
                 account_id=account_id,
@@ -90,12 +87,24 @@ class AuthService:
                     profile_path=profile_path,
                     display=display,
                     timeout_seconds=self._auth_timeout_seconds,
+                    on_intervention=lambda reason: self._mark_intervention(session, reason),
                 )
                 self._complete(session, outcome)
         except Exception as exc:  # pragma: no cover - defensive
             session.status = "failed"
             session.error = str(exc)
-            self._revoke(session.token)
+            self._screen.stop()
+
+    def _mark_intervention(self, session: AuthSession, reason: str) -> None:
+        session.status = "needs_intervention"
+        session.error = reason
+        with self._database.connect() as connection:
+            self._repository.update(
+                connection,
+                session.account_id,
+                state=AccountState.NEEDS_INTERVENTION,
+                last_block_reason=reason,
+            )
 
     def _complete(self, session: AuthSession, outcome) -> None:
         with self._database.connect() as connection:
@@ -129,13 +138,18 @@ class AuthService:
                 )
                 session.status = "completed"
                 session.error = outcome.error
-        self._revoke(session.token)
+        self._screen.stop()
 
     def get(self, token: str) -> AuthSession | None:
         return self._sessions.get(token)
 
     def revoke(self, token: str) -> None:
         self._revoke(token)
+
+    def revoke_account(self, account_id: int) -> None:
+        for token, session in list(self._sessions.items()):
+            if session.account_id == account_id:
+                self._revoke(token)
 
     def _revoke(self, token: str) -> None:
         session = self._sessions.pop(token, None)

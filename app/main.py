@@ -65,7 +65,7 @@ def create_app(
     events_repo = RunEventsRepository()
     settings_repo = SettingsRepository()
 
-    account_service = AccountService(accounts_repo)
+    account_service = AccountService(accounts_repo, settings.sessions_path)
     auth_service = AuthService(
         database=database,
         repository=accounts_repo,

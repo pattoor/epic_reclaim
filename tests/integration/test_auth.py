@@ -6,7 +6,7 @@ from app.integrations.auth_browser import AuthOutcome
 from app.repositories import AccountsRepository
 from app.services.account_service import AccountService
 from app.services.auth_service import AuthService
-from tests.auth_fakes import FakeAuthBrowser, FakeScreen
+from tests.auth_fakes import BlockingAuthBrowser, FakeAuthBrowser, FakeScreen
 
 
 def _database(tmp_path) -> Database:
@@ -197,6 +197,37 @@ def test_auth_screen_uses_session_vnc_password(tmp_path):
     session = auth.start(account.id)
     assert session.vnc_password is not None
     assert screen.password == session.vnc_password
+
+
+def test_auth_intervention_keeps_browser_and_session_until_resolution(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    browser = BlockingAuthBrowser()
+    screen = FakeScreen(available=True)
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=browser,
+        screen=screen,
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id)
+    _wait(lambda: session.status == "needs_intervention")
+
+    with database.connect() as connection:
+        stored = accounts.get(connection, account.id)
+    assert stored.state == AccountState.NEEDS_INTERVENTION
+    assert screen.stopped is False
+    assert auth.get(session.token) is session
+
+    browser.release.set()
+    _wait(lambda: session.status == "completed")
+    assert auth.get(session.token) is session
+    auth.revoke(session.token)
+    assert screen.stopped is True
 
 
 def _wait(predicate, timeout_seconds: float = 5):

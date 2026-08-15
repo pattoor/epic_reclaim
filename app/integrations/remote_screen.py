@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -60,8 +61,13 @@ class NoVNCProvider(RemoteScreen):
             return None
 
         fd, passfile = tempfile.mkstemp(prefix="epic-reclaim-vnc-")
-        with Path(passfile).open("w") as handle:
-            handle.write(password)
+        os.close(fd)
+        subprocess.run(
+            ["x11vnc", "-storepasswd", password, passfile],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         self._passfile = Path(passfile)
 
         xvfb = subprocess.Popen(
@@ -76,6 +82,7 @@ class NoVNCProvider(RemoteScreen):
                 self._display,
                 "-rfbauth",
                 passfile,
+                "-localhost",
                 "-forever",
                 "-rfbport",
                 str(self._vnc_port),

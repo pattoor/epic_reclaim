@@ -48,6 +48,12 @@ def _validate_settings_update(request: Request, updates: dict) -> None:
             status_code=422,
             detail="claim_delay_max_seconds must be >= claim_delay_min_seconds",
         )
+    if updates.get("telegram_enabled") is True:
+        if not effective.telegram_bot_token or not effective.telegram_chat_id:
+            raise HTTPException(
+                status_code=422,
+                detail="Telegram requires TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID",
+            )
 
 
 def _state(request: Request):
@@ -146,6 +152,7 @@ def delete_account(account_id: int, request: Request, confirm: bool = False):
             detail="permanent deletion requires confirm=true",
         )
     try:
+        _auth_service(request).revoke_account(account_id)
         with _db(request).connect() as connection:
             _account_service(request).delete(connection, account_id)
     except NotFoundError as exc:
@@ -470,6 +477,7 @@ def get_settings(request: Request):
         "max_retry_attempts": effective.max_retry_attempts,
         "telegram_enabled": effective.telegram_enabled,
         "app_port": settings.app_port,
+        "next_run_at": getattr(request.app.state.scheduler, "next_run_at", None),
     }
 
 

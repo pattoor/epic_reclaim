@@ -2,7 +2,9 @@ const state = {
   view: "dashboard",
   accounts: [],
   authToken: null,
+  authPollTimer: null,
   pollTimer: null,
+  currentRunId: null,
 };
 
 function $(id) { return document.getElementById(id); }
@@ -31,6 +33,7 @@ function switchView(view) {
   if (view === "history") loadHistory();
   if (view === "settings") loadSettings();
   if (view === "dashboard") loadDashboard();
+  if (view === "execution" && state.currentRunId) loadExecution(state.currentRunId);
 }
 
 document.querySelectorAll("nav button").forEach((b) =>
@@ -39,11 +42,12 @@ document.querySelectorAll("nav button").forEach((b) =>
 
 async function loadDashboard() {
   try {
-    const [health, runs, accounts, claims] = await Promise.all([
+    const [health, runs, accounts, claims, settings] = await Promise.all([
       api("/health"),
       api("/api/runs?limit=5"),
       api("/api/accounts"),
       api("/api/claims?limit=8"),
+      api("/api/settings"),
     ]);
     $("health-status").textContent =
       `status: ${health.status} | database: ${health.database} | playwright: ${health.playwright} | remote screen: ${health.remote_screen}`;
@@ -62,6 +66,12 @@ async function loadDashboard() {
 
     renderRecentClaims(claims);
     renderRecentRuns(runs);
+    $("scheduler-status").textContent = settings.scheduler_enabled
+      ? `enabled (every ${settings.scheduler_interval_seconds}s)`
+      : "disabled";
+    $("next-run").textContent = settings.scheduler_enabled && settings.next_run_at
+      ? `next run: ${settings.next_run_at}`
+      : "scheduler off";
   } catch (error) {
     $("health-status").textContent = error.message;
   }
@@ -93,7 +103,9 @@ async function schedulerInfo() {
     $("scheduler-status").textContent = settings.scheduler_enabled
       ? `enabled (every ${settings.scheduler_interval_seconds}s)`
       : "disabled";
-    $("next-run").textContent = settings.scheduler_enabled ? "scheduler active" : "scheduler off";
+    $("next-run").textContent = settings.scheduler_enabled && settings.next_run_at
+      ? `next run: ${settings.next_run_at}`
+      : "scheduler off";
   } catch (error) {
     $("scheduler-status").textContent = error.message;
   }
@@ -104,6 +116,8 @@ $("run-now").addEventListener("click", async () => {
   try {
     const result = await api("/api/runs/manual", { method: "POST" });
     $("run-feedback").textContent = `run #${result.run_id} started`;
+    state.currentRunId = result.run_id;
+    switchView("execution");
     watchRun(result.run_id);
   } catch (error) {
     $("run-feedback").textContent = error.message;
@@ -111,6 +125,7 @@ $("run-now").addEventListener("click", async () => {
 });
 
 function watchRun(runId) {
+  state.currentRunId = runId;
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = setInterval(async () => {
     try {
@@ -118,6 +133,7 @@ function watchRun(runId) {
         api(`/api/runs/${runId}`),
         api(`/api/runs/${runId}/events`),
       ]);
+      renderExecution(runId, run, events);
       $("run-feedback").textContent =
         `run #${runId}: ${run.status} | claimed ${run.claimed_count} | failed ${run.failed_count} | games ${run.games_detected}`;
       if (run.status !== "running") {
@@ -130,6 +146,29 @@ function watchRun(runId) {
       state.pollTimer = null;
     }
   }, 2000);
+}
+
+async function loadExecution(runId) {
+  try {
+    const [run, events] = await Promise.all([
+      api(`/api/runs/${runId}`),
+      api(`/api/runs/${runId}/events`),
+    ]);
+    renderExecution(runId, run, events);
+  } catch (error) {
+    $("execution-summary").textContent = error.message;
+  }
+}
+
+function renderExecution(runId, run, events) {
+  $("execution-run").textContent = `Run #${runId} (${run.status})`;
+  $("execution-summary").textContent =
+    `games ${run.games_detected} | claimed ${run.claimed_count} | already owned ${run.already_owned_count} | failed ${run.failed_count}`;
+  $("execution-events").querySelector("tbody").innerHTML = events
+    .slice()
+    .reverse()
+    .map((event) => `<tr><td>${escapeHtml(event.created_at || "")}</td><td>${escapeHtml(event.event_type)}</td><td>${event.account_id || ""}</td><td>${event.game_id || ""}</td><td>${escapeHtml(event.message || "")}</td></tr>`)
+    .join("");
 }
 
 $("add-account").addEventListener("click", async () => {
@@ -153,13 +192,14 @@ async function loadAccounts() {
     const body = $("accounts-table").querySelector("tbody");
     body.innerHTML = state.accounts
       .map(
-        (a) => `<tr>
-          <td>${escapeHtml(a.display_name)}</td>
+      (a) => `<tr>
+          <td><input data-field="name" data-id="${a.id}" value="${escapeHtml(a.display_name)}"></td>
           <td><span class="badge ${a.state}">${a.state}</span></td>
           <td>${a.enabled ? "yes" : "no"}</td>
-          <td>${a.processing_order}</td>
+          <td><input data-field="order" data-id="${a.id}" type="number" value="${a.processing_order}"></td>
           <td>
-            <button data-act="toggle" data-id="${a.id}">${a.enabled ? "Disable" : "Enable"}</button>
+            <button data-act="save" data-id="${a.id}">Save</button>
+            <button data-act="toggle" data-id="${a.id}">${a.enabled ? "Deactivate" : "Activate"}</button>
             <button data-act="authenticate" data-id="${a.id}">Authenticate</button>
             <button data-act="resolve" data-id="${a.id}" ${a.state === "active" ? "disabled" : ""}>Resolve</button>
             <button data-act="delete" data-id="${a.id}" class="danger">Delete</button>
@@ -183,6 +223,14 @@ document.querySelector("#accounts-table").addEventListener("click", async (event
       await api(`/api/accounts/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ enabled: !account.enabled }),
+      });
+      loadAccounts();
+    } else if (act === "save") {
+      const name = document.querySelector(`[data-field="name"][data-id="${id}"]`).value.trim();
+      const order = Number(document.querySelector(`[data-field="order"][data-id="${id}"]`).value);
+      await api(`/api/accounts/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ display_name: name, processing_order: order }),
       });
       loadAccounts();
     } else if (act === "authenticate") {
@@ -222,9 +270,15 @@ async function pollAuth() {
   try {
     const session = await api(`/api/auth/${state.authToken}`);
     $("auth-status").textContent = `status: ${session.status}`;
-    if (session.status !== "running") {
+    if (session.status === "completed" || session.status === "failed") {
       loadAccounts();
-      if (session.screen_url) $("auth-screen").src = "";
+      $("auth-screen").src = "";
+      if (state.authPollTimer) {
+        clearInterval(state.authPollTimer);
+        state.authPollTimer = null;
+      }
+    } else if (!state.authPollTimer) {
+      state.authPollTimer = setInterval(pollAuth, 2000);
     }
   } catch (error) {
     $("auth-status").textContent = error.message;
@@ -235,6 +289,10 @@ $("auth-close").addEventListener("click", async () => {
   if (state.authToken) {
     await api(`/api/auth/${state.authToken}/revoke`, { method: "POST" }).catch(() => {});
     state.authToken = null;
+  }
+  if (state.authPollTimer) {
+    clearInterval(state.authPollTimer);
+    state.authPollTimer = null;
   }
   $("auth-panel").hidden = true;
   loadAccounts();

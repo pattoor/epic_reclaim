@@ -139,6 +139,13 @@ class AccountsRepository:
         ).fetchall()
         return [_row_account(row) for row in rows]
 
+    def list_active(self, connection) -> list[Account]:
+        rows = connection.execute(
+            "SELECT * FROM accounts WHERE enabled = 1 AND state = 'active' "
+            "ORDER BY processing_order, id"
+        ).fetchall()
+        return [_row_account(row) for row in rows]
+
     def update(self, connection, account_id: int, **fields) -> Account:
         allowed = {
             "display_name",

@@ -109,23 +109,23 @@ El orden prioriza:
 
 **Objetivo:** completar el flujo central con un único servicio reutilizable por todos los triggers.
 
-- [ ] Implementar `RunWorkflow.run(trigger)` con dependencias inyectables.
-- [ ] Adquirir `RunLock` antes de crear una ejecución.
-- [ ] Rechazar una segunda ejecución con el `run_id` de la ejecución activa.
-- [ ] Crear y actualizar `Run` con trigger, timestamps, progreso, contadores y errores.
-- [ ] Descubrir y persistir juegos antes de procesar cuentas.
-- [ ] Procesar cuentas activas en `processing_order` y juegos secuencialmente.
-- [ ] Comprobar ownership antes de intentar reclamar.
-- [ ] Registrar `already_owned` cuando el juego ya pertenezca a la cuenta.
-- [ ] Confirmar que Epic agregó el juego a la biblioteca antes de registrar `claimed`.
-- [ ] Registrar `failed` o `skipped` con contexto seguro cuando corresponda.
-- [ ] Crear `ClaimAttempt` para cada resultado de cada ejecución.
-- [ ] Reintentar solo fallos transitorios, con máximo 3 intentos y backoff acotado.
-- [ ] Aplicar delay aleatorio configurable entre 2 y 5 segundos por defecto.
-- [ ] Pausar la cuenta ante CAPTCHA, MFA, auth inválida, rate limit, bloqueo o error peligroso.
-- [ ] Continuar con otros juegos/cuentas solo cuando sea seguro.
-- [ ] Emitir eventos de progreso sin filtrar datos sensibles.
-- [ ] Crear tests de éxito, ya adquirido, idempotencia, orden, retry, intervención, recuperación y lock.
+- [x] Implementar `RunWorkflow.run(trigger)` con dependencias inyectables.
+- [x] Adquirir `RunLock` antes de crear una ejecución.
+- [x] Rechazar una segunda ejecución con el `run_id` de la ejecución activa.
+- [x] Crear y actualizar `Run` con trigger, timestamps, progreso, contadores y errores.
+- [x] Descubrir y persistir juegos antes de procesar cuentas.
+- [x] Procesar cuentas activas en `processing_order` y juegos secuencialmente.
+- [x] Comprobar ownership antes de intentar reclamar.
+- [x] Registrar `already_owned` cuando el juego ya pertenezca a la cuenta.
+- [x] Confirmar que Epic agregó el juego a la biblioteca antes de registrar `claimed`.
+- [x] Registrar `failed` o `skipped` con contexto seguro cuando corresponda.
+- [x] Crear `ClaimAttempt` para cada resultado de cada ejecución.
+- [x] Reintentar solo fallos transitorios, con máximo 3 intentos y backoff acotado.
+- [x] Aplicar delay aleatorio configurable entre 2 y 5 segundos por defecto.
+- [x] Pausar la cuenta ante CAPTCHA, MFA, auth inválida, rate limit, bloqueo o error peligroso.
+- [x] Continuar con otros juegos/cuentas solo cuando sea seguro.
+- [x] Emitir eventos de progreso sin filtrar datos sensibles.
+- [x] Crear tests de éxito, ya adquirido, idempotencia, orden, retry, intervención, recuperación y lock.
 
 **Criterio de salida:** con un `EpicAdapter` fake se completa una ejecución end-to-end y se puede repetir sin duplicar claims lógicos.
 

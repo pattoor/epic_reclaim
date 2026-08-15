@@ -279,7 +279,9 @@ class ClaimsRepository:
                 else current["intervention_required"]
             ),
             "error": error,
-            "claimed_at": claimed_at,
+            "claimed_at": (
+                claimed_at if claimed_at is not None else current["claimed_at"]
+            ),
             "updated_at": utc_now(),
         }
         connection.execute(

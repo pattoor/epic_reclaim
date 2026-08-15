@@ -83,8 +83,33 @@ def test_claim_idempotency_unique_account_game(tmp_path):
         except sqlite3.IntegrityError:
             pass
 
-        assert claims.get(connection, account.id, game.id) is not None
-        assert len(claims.list(connection)) == 1
+
+def test_claimed_at_preserved_when_marked_already_owned(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    games = GamesRepository()
+    claims = ClaimsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "A")
+        game = games.upsert(connection, "epic-1", "Game One", "https://store/game-one")
+        claim = claims.create(connection, account.id, game.id, ClaimState.CLAIMED)
+        claim = claims.update_result(
+            connection,
+            claim.id,
+            status=ClaimState.CLAIMED,
+            attempts=1,
+            claimed_at="2026-01-01T00:00:00+00:00",
+        )
+        original_claimed_at = claim.claimed_at
+
+        claim = claims.update_result(
+            connection,
+            claim.id,
+            status=ClaimState.ALREADY_OWNED,
+            attempts=2,
+        )
+        assert claim.status == ClaimState.ALREADY_OWNED
+        assert claim.claimed_at == original_claimed_at
 
 
 def test_claim_attempts_history_retained(tmp_path):

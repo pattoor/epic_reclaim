@@ -4,25 +4,25 @@ Ruta de trabajo para construir el MVP de **Epic Games Free Games Auto-Claimer**,
 
 ## Fase 0: Arquitectura y decisiones
 
-- Confirmar el alcance del MVP y mantener Epic Games Store como unica plataforma.
-- Definir la estructura modular del backend, frontend, integraciones y adaptadores especificos de Epic.
-- Elegir dependencias minimas compatibles con FastAPI, SQLite, Playwright, scheduler y testing.
-- Documentar el modelo de estados para cuentas, claims, ejecuciones, errores e intervenciones.
-- Diseñar el esquema SQLite, indices y restricciones de unicidad para `account + game`.
-- Definir el contrato REST y el formato de eventos/progreso de ejecuciones.
-- Diseñar la estrategia de perfiles persistentes de Playwright, sin almacenar contrasenas.
-- Definir limites de recursos, bloqueo de ejecuciones concurrentes y politica de reintentos.
-- Registrar cualquier requisito que no pueda satisfacerse exactamente antes de implementar.
+- [x] Confirmar el alcance del MVP y mantener Epic Games Store como unica plataforma.
+- [x] Definir la estructura modular del backend, frontend, integraciones y adaptadores especificos de Epic.
+- [x] Elegir dependencias minimas compatibles con FastAPI, SQLite, Playwright, scheduler y testing.
+- [x] Documentar el modelo de estados para cuentas, claims, ejecuciones, errores e intervenciones.
+- [x] Diseñar el esquema SQLite, indices y restricciones de unicidad para `account + game`.
+- [x] Definir el contrato REST y el formato de eventos/progreso de ejecuciones.
+- [x] Diseñar la estrategia de perfiles persistentes de Playwright, sin almacenar contrasenas.
+- [x] Definir limites de recursos, bloqueo de ejecuciones concurrentes y politica de reintentos.
+- [x] Registrar cualquier requisito que no pueda satisfacerse exactamente antes de implementar.
 
 ## Fase 1: Base del proyecto y configuracion
 
-- Crear la estructura del repositorio para backend, frontend, tests y despliegue.
-- Configurar FastAPI, SQLite, migraciones/inicializacion de base de datos y logging estructurado.
-- Crear el sistema de configuracion por variables de entorno.
-- Incluir `.env.example`, `.gitignore` y `requirements.txt` sin secretos reales.
-- Definir rutas configurables para base de datos, perfiles de navegador y otros datos persistentes.
-- Implementar `GET /health` con comprobaciones de aplicacion, SQLite y Playwright sin contactar Epic.
-- Agregar una base de tests unitarios y de integracion.
+- [x] Crear la estructura del repositorio para backend, frontend, tests y despliegue.
+- [x] Configurar FastAPI, SQLite, inicializacion de base de datos y logging estructurado.
+- [x] Crear el sistema de configuracion por variables de entorno.
+- [x] Incluir `.env.example`, `.gitignore` y `requirements.txt` sin secretos reales.
+- [x] Definir rutas configurables para base de datos, perfiles de navegador y otros datos persistentes.
+- [x] Implementar `GET /health` con comprobaciones de aplicacion, SQLite y Playwright sin contactar Epic.
+- [x] Agregar una base de tests unitarios y de integracion.
 
 ## Fase 2: Persistencia y dominio
 

@@ -226,7 +226,10 @@ def test_workflow_auth_required_sets_needs_authentication(tmp_path):
     assert outcome.failed_count == 1
     with database.connect() as connection:
         stored = AccountsRepository().get(connection, account_id)
+        claim = ClaimsRepository().get(connection, account_id, 1)
+        attempts = ClaimAttemptsRepository().list_by_claim(connection, claim.id)
     assert stored.state == AccountState.NEEDS_AUTHENTICATION
+    assert attempts[-1].intervention_required is True
 
 
 def test_workflow_rate_limit_pauses_account(tmp_path):
@@ -242,7 +245,10 @@ def test_workflow_rate_limit_pauses_account(tmp_path):
     assert outcome.failed_count == 1
     with database.connect() as connection:
         stored = AccountsRepository().get(connection, account_id)
+        claim = ClaimsRepository().get(connection, account_id, 1)
+        attempts = ClaimAttemptsRepository().list_by_claim(connection, claim.id)
     assert stored.state == AccountState.PAUSED
+    assert attempts[-1].intervention_required is False
 
 
 def test_workflow_blocked_account_pauses(tmp_path):

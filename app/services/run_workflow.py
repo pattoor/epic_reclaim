@@ -420,7 +420,9 @@ class RunWorkflow:
             counters,
             attempts=1,
             error=str(exc),
-            intervention_required=True,
+            intervention_required=isinstance(
+                exc, (InterventionRequiredError, AuthenticationRequiredError)
+            ),
         )
         return "paused"
 

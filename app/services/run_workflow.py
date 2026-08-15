@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Callable
 
@@ -102,10 +103,35 @@ class RunWorkflow:
         finally:
             self._lock.release()
 
-    def _run_locked(self, trigger: str) -> RunOutcome:
+    def start(self, trigger: str) -> RunOutcome:
+        """Acquires the lock and launches the run in a background thread."""
+        if not self._lock.acquire():
+            with self._database.connect() as connection:
+                active = self._runs.get_active(connection)
+            return RunOutcome(
+                run_id=active.id if active else None,
+                status="conflict",
+                error="another run is already in progress",
+            )
         with self._database.connect() as connection:
             run = self._runs.create(connection, trigger)
-            run_id = run.id
+        thread = threading.Thread(
+            target=self._execute, args=(trigger, run.id), daemon=True
+        )
+        thread.start()
+        return RunOutcome(run_id=run.id, status=RunState.RUNNING)
+
+    def _execute(self, trigger: str, run_id: int) -> None:
+        try:
+            self._run_locked(trigger, run_id=run_id)
+        finally:
+            self._lock.release()
+
+    def _run_locked(self, trigger: str, run_id: int | None = None) -> RunOutcome:
+        with self._database.connect() as connection:
+            if run_id is None:
+                run = self._runs.create(connection, trigger)
+                run_id = run.id
             settings = self._settings_provider(connection)
             self._events.add(connection, run_id, RunEventType.RUN_STARTED)
 

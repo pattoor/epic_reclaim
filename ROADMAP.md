@@ -133,19 +133,19 @@ El orden prioriza:
 
 **Objetivo:** hacer operable el backend sin depender todavía de una interfaz completa.
 
-- [ ] Implementar `GET/POST/PATCH/DELETE /api/accounts` y acciones de autenticación/intervención.
-- [ ] Implementar `GET /api/games` y `GET /api/claims` con filtros útiles.
-- [ ] Implementar `GET /api/runs`, `GET /api/runs/{id}` y progreso de ejecución.
-- [ ] Implementar `POST /api/runs` como trigger externo del workflow compartido.
-- [ ] Devolver conflicto claro cuando ya exista una ejecución activa.
-- [ ] Implementar `GET/PATCH /api/settings` para opciones no secretas.
-- [ ] Validar payloads en los endpoints y evitar filtrar excepciones internas.
-- [ ] Implementar scheduler interno habilitable/deshabilitable.
-- [ ] Soportar intervalos configurables sin asumir únicamente jueves o cambios semanales.
-- [ ] Iniciar y detener el scheduler con el ciclo de vida de FastAPI.
-- [ ] Asegurar que el scheduler respete `RunLock` y no genere loops agresivos ante errores.
-- [ ] Añadir protección opcional por `EXTERNAL_API_KEY` para triggers externos.
-- [ ] Crear tests de contrato API, scheduler, lock, trigger externo y settings.
+- [x] Implementar `GET/POST/PATCH/DELETE /api/accounts` y acciones de autenticación/intervención.
+- [x] Implementar `GET /api/games` y `GET /api/claims` con filtros útiles.
+- [x] Implementar `GET /api/runs`, `GET /api/runs/{id}` y progreso de ejecución.
+- [x] Implementar `POST /api/runs` como trigger externo del workflow compartido.
+- [x] Devolver conflicto claro cuando ya exista una ejecución activa.
+- [x] Implementar `GET/PATCH /api/settings` para opciones no secretas.
+- [x] Validar payloads en los endpoints y evitar filtrar excepciones internas.
+- [x] Implementar scheduler interno habilitable/deshabilitable.
+- [x] Soportar intervalos configurables sin asumir únicamente jueves o cambios semanales.
+- [x] Iniciar y detener el scheduler con el ciclo de vida de FastAPI.
+- [x] Asegurar que el scheduler respete `RunLock` y no genere loops agresivos ante errores.
+- [x] Añadir protección opcional por `EXTERNAL_API_KEY` para triggers externos.
+- [x] Crear tests de contrato API, scheduler, lock, trigger externo y settings.
 
 **Criterio de salida:** una ejecución puede iniciarse manualmente por API, automáticamente por scheduler o desde un cliente externo, siempre con el mismo workflow.
 

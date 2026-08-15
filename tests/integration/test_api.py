@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 from fastapi.testclient import TestClient
 
@@ -69,6 +70,19 @@ def test_delete_account_requires_confirmation(tmp_path):
         deleted = client.delete(f"/api/accounts/{account_id}?confirm=true")
         assert deleted.status_code == 200
         assert client.get("/api/accounts").json() == []
+
+
+def test_delete_account_removes_persistent_session_profile(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        account_id = client.post("/api/accounts", json={"display_name": "A"}).json()["id"]
+        profile = Path(tmp_path / "sessions" / str(account_id))
+        profile.mkdir(parents=True)
+        (profile / "marker").write_text("session", encoding="ascii")
+
+        response = client.delete(f"/api/accounts/{account_id}?confirm=true")
+        assert response.status_code == 200
+        assert not profile.exists()
 
 
 def test_resolve_intervention(tmp_path):
@@ -150,6 +164,27 @@ def test_settings_reject_max_below_current_min(tmp_path):
             client.patch("/api/settings", json={"claim_delay_max_seconds": 4}).status_code
             == 422
         )
+
+
+def test_settings_cannot_enable_unconfigured_telegram(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"telegram_enabled": True})
+    assert response.status_code == 422
+
+
+def test_settings_can_enable_configured_telegram(tmp_path):
+    app = _make_app(
+        tmp_path,
+        extra={
+            "TELEGRAM_BOT_TOKEN": "test-token",
+            "TELEGRAM_CHAT_ID": "test-chat",
+        },
+    )
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"telegram_enabled": True})
+    assert response.status_code == 200
+    assert response.json()["telegram_enabled"] is True
 
 
 def test_external_api_key_protects_run_trigger(tmp_path):

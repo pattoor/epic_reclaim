@@ -36,6 +36,11 @@ def test_dashboard_served(tmp_path):
     assert response.status_code == 200
     assert "Epic Reclaim" in response.text
     assert "app.js" in response.text
+    assert "Execution" in response.text
+    assert "execution-events" in response.text
+    script = client.get("/static/app.js")
+    assert "data-field=\"order\"" in script.text
+    assert "api/runs/${runId}/events" in script.text
 
 
 def test_export_csv(tmp_path):

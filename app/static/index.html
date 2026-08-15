@@ -12,6 +12,7 @@
     <nav>
       <button data-view="dashboard" class="active">Dashboard</button>
       <button data-view="accounts">Accounts</button>
+      <button data-view="execution">Execution</button>
       <button data-view="history">History</button>
       <button data-view="settings">Settings</button>
     </nav>
@@ -77,6 +78,17 @@
         <iframe id="auth-screen" width="100%" height="420"></iframe>
         <p id="auth-status"></p>
         <button id="auth-close">Close and revoke</button>
+      </div>
+    </section>
+
+    <section id="view-execution" hidden>
+      <div class="card">
+        <h3 id="execution-run">No execution selected</h3>
+        <p id="execution-summary" class="muted"></p>
+        <table id="execution-events">
+          <thead><tr><th>Time</th><th>Event</th><th>Account</th><th>Game</th><th>Message</th></tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
 

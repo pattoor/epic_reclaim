@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import json
-import sqlite3
-
 from app.database import SCHEMA_VERSION
-from app.domain.errors import NotFoundError
 
 TABLES = (
     "accounts",
@@ -38,7 +35,7 @@ def export_backup(connection) -> dict:
     return payload
 
 
-def _validate(payload: dict) -> None:
+def _validate(connection, payload: dict) -> None:
     if not isinstance(payload, dict):
         raise BackupError("backup must be a JSON object")
     if payload.get("schema_version") != SCHEMA_VERSION:
@@ -51,10 +48,19 @@ def _validate(payload: dict) -> None:
     for table in TABLES:
         if not isinstance(tables.get(table), list):
             raise BackupError(f"backup is missing the {table} table")
+        columns = {
+            row["name"]
+            for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        for record in tables[table]:
+            if not isinstance(record, dict) or set(record) != columns:
+                raise BackupError(f"invalid columns in {table} backup")
+            if table == "settings" and record["key"] in SENSITIVE_SETTINGS:
+                raise BackupError(f"sensitive setting is not allowed: {record['key']}")
 
 
 def import_backup(connection, payload: dict, *, overwrite: bool = False) -> int:
-    _validate(payload)
+    _validate(connection, payload)
     if not overwrite:
         existing = sum(
             connection.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
@@ -62,26 +68,36 @@ def import_backup(connection, payload: dict, *, overwrite: bool = False) -> int:
         )
         if existing:
             raise BackupError("target database already has data; confirmation required")
-    # Children first to respect foreign key constraints.
-    for table in (
-        "run_events",
-        "claim_attempts",
-        "claims",
-        "runs",
-        "games",
-        "accounts",
-        "settings",
-    ):
-        connection.execute(f"DELETE FROM {table}")
-    for table in TABLES:
-        rows = payload["tables"].get(table, [])
-        for row in rows:
-            columns = list(row.keys())
-            placeholders = ", ".join("?" for _ in columns)
-            connection.execute(
-                f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
-                [row[column] for column in columns],
+    connection.execute("SAVEPOINT backup_restore")
+    try:
+        # Children first to respect foreign key constraints.
+        for table in (
+            "run_events",
+            "claim_attempts",
+            "claims",
+            "runs",
+            "games",
+            "accounts",
+            "settings",
+        ):
+            connection.execute(f"DELETE FROM {table}")
+        for table in TABLES:
+            rows = payload["tables"].get(table, [])
+            columns = list(
+                row["name"]
+                for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
             )
-    connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+            placeholders = ", ".join("?" for _ in columns)
+            for row in rows:
+                connection.execute(
+                    f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({placeholders})",
+                    [row[column] for column in columns],
+                )
+        connection.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    except Exception as error:
+        connection.execute("ROLLBACK TO backup_restore")
+        connection.execute("RELEASE backup_restore")
+        raise BackupError("backup restore failed; existing data was preserved") from error
+    connection.execute("RELEASE backup_restore")
     connection.commit()
     return sum(len(payload["tables"].get(table, [])) for table in TABLES)

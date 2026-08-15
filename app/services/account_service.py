@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 from app.domain.models import Account, AccountState
 from app.repositories import AccountsRepository
 
 
 class AccountService:
-    def __init__(self, repository: AccountsRepository):
+    def __init__(self, repository: AccountsRepository, sessions_path: str | None = None):
         self._repository = repository
+        self._sessions_path = Path(sessions_path) if sessions_path else None
 
     def create(self, connection, display_name: str) -> Account:
         return self._repository.create(connection, display_name)
@@ -48,3 +52,5 @@ class AccountService:
 
     def delete(self, connection, account_id: int) -> None:
         self._repository.delete(connection, account_id)
+        if self._sessions_path is not None:
+            shutil.rmtree(self._sessions_path / str(account_id), ignore_errors=True)

@@ -129,3 +129,24 @@ def test_backup_excludes_sensitive_settings(tmp_path):
     payload_text = json.dumps(payload)
     assert "super-secret-token" not in payload_text
     assert "api-key-secret" not in payload_text
+
+
+def test_failed_restore_is_atomic_and_preserves_existing_data(tmp_path):
+    database = Database(str(tmp_path / "epic.db"))
+    database.initialize()
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        existing = accounts.create(connection, "Keep me")
+        payload = export_backup(connection)
+
+    payload["tables"]["accounts"][0]["unexpected"] = "invalid"
+    with database.connect() as connection:
+        try:
+            import_backup(connection, payload, overwrite=True)
+            raise AssertionError("invalid columns must be rejected")
+        except BackupError:
+            pass
+
+    with database.connect() as connection:
+        stored = accounts.get(connection, existing.id)
+    assert stored.display_name == "Keep me"

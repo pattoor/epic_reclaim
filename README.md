@@ -86,7 +86,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor.
+Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. El puerto `6080` se publica para la pantalla noVNC durante autenticaciones.
 
 Los volumenes conservan:
 
@@ -129,6 +129,7 @@ Variables soportadas (ver `.env.example`):
 ```env
 APP_HOST=0.0.0.0
 APP_PORT=8765
+NOVNC_PORT=6080
 DATABASE_PATH=./data/database/epic.db
 SESSIONS_PATH=./data/sessions
 STATE_PATH=./data/state

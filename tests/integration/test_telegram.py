@@ -92,3 +92,22 @@ def test_telegram_alert_mentions_context(tmp_path, monkeypatch):
 
     notifier.notify_alert("account 3 paused (needs_intervention): captcha required")
     assert calls == ["Epic Reclaim alert: account 3 paused (needs_intervention): captcha required"]
+
+
+def test_telegram_checks_http_response(tmp_path, monkeypatch):
+    notifier, _ = _make_notifier(tmp_path, telegram_enabled=True)
+    notifier._is_enabled = lambda: True
+
+    class Response:
+        def raise_for_status(self):
+            raise RuntimeError("telegram rejected request")
+
+        def json(self):
+            return {"ok": False}
+
+    calls = []
+    monkeypatch.setattr("app.integrations.telegram.httpx.post", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("app.integrations.telegram.logger.warning", lambda *args, **kwargs: calls.append(args[0]))
+
+    notifier.notify_alert("test")
+    assert "telegram_send_failed" in calls

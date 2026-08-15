@@ -40,7 +40,11 @@ class TelegramNotifier:
         url = f"https://api.telegram.org/bot{settings.telegram_bot_token}/sendMessage"
         payload = {"chat_id": settings.telegram_chat_id, "text": text}
         try:
-            httpx.post(url, json=payload, timeout=10)
+            response = httpx.post(url, json=payload, timeout=10)
+            response.raise_for_status()
+            body = response.json()
+            if body.get("ok") is not True:
+                logger.warning("telegram_send_rejected")
         except Exception:
             logger.warning("telegram_send_failed", exc_info=True)
 

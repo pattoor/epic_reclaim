@@ -153,21 +153,21 @@ El orden prioriza:
 
 **Objetivo:** administrar el sistema desde la interfaz principal sin duplicar lógica de negocio.
 
-- [ ] Crear frontend compilable y servido por FastAPI o por el mecanismo definido.
-- [ ] Implementar resumen con salud, scheduler, próxima/última ejecución y alertas.
-- [ ] Implementar listado de cuentas con nombre, estado, enabled y orden.
-- [ ] Implementar alta, edición, activación/desactivación y reordenamiento de cuentas.
-- [ ] Implementar inicio y finalización de autenticación/reautenticación remota.
-- [ ] Mostrar y resolver cuentas en `needs_authentication`, `needs_intervention` o `paused`.
-- [ ] Requerir confirmación adicional para eliminación permanente.
-- [ ] Crear vista de ejecución separada con progreso por cuenta y juego.
-- [ ] Implementar polling moderado y detenerlo al finalizar una ejecución.
-- [ ] Crear historial con filtros por cuenta, fecha y estado.
-- [ ] Implementar exportación CSV y JSON sin secretos ni sesiones.
-- [ ] Crear settings para scheduler, delays, Telegram y otras opciones no secretas.
-- [ ] Mostrar logs recientes o diagnóstico equivalente sin datos sensibles.
-- [ ] Verificar responsive en escritorio y móvil.
-- [ ] Crear una prueba E2E controlada del dashboard usando API/adaptador fake.
+- [x] Crear frontend compilable y servido por FastAPI o por el mecanismo definido.
+- [x] Implementar resumen con salud, scheduler, próxima/última ejecución y alertas.
+- [x] Implementar listado de cuentas con nombre, estado, enabled y orden.
+- [x] Implementar alta, edición, activación/desactivación y reordenamiento de cuentas.
+- [x] Implementar inicio y finalización de autenticación/reautenticación remota.
+- [x] Mostrar y resolver cuentas en `needs_authentication`, `needs_intervention` o `paused`.
+- [x] Requerir confirmación adicional para eliminación permanente.
+- [x] Crear vista de ejecución separada con progreso por cuenta y juego.
+- [x] Implementar polling moderado y detenerlo al finalizar una ejecución.
+- [x] Crear historial con filtros por cuenta, fecha y estado.
+- [x] Implementar exportación CSV y JSON sin secretos ni sesiones.
+- [x] Crear settings para scheduler, delays, Telegram y otras opciones no secretas.
+- [x] Mostrar logs recientes o diagnóstico equivalente sin datos sensibles.
+- [x] Verificar responsive en escritorio y móvil.
+- [x] Crear una prueba E2E controlada del dashboard usando API/adaptador fake.
 
 **Criterio de salida:** un usuario puede administrar cuentas, lanzar una ejecución, observarla, resolver una intervención y consultar/exportar su historial desde el dashboard.
 

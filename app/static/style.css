@@ -1,7 +1,97 @@
+* { box-sizing: border-box; }
+
 body {
-  font-family: system-ui, sans-serif;
-  margin: 2rem auto;
-  max-width: 48rem;
-  padding: 0 1rem;
-  color: #222;
+  font-family: system-ui, -apple-system, sans-serif;
+  margin: 0;
+  background: #f5f6f8;
+  color: #1a1d21;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1.5rem;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e5e9;
+}
+
+header h1 { font-size: 1.1rem; margin: 0; }
+
+nav button {
+  border: 0;
+  background: transparent;
+  padding: 0.5rem 0.75rem;
+  margin-left: 0.25rem;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #555;
+}
+
+nav button.active { background: #e8f0fe; color: #1a5fb4; }
+
+main { max-width: 900px; margin: 1.5rem auto; padding: 0 1rem; }
+
+.cards { display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+
+.card {
+  flex: 1 1 200px;
+  background: #fff;
+  border: 1px solid #e2e5e9;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+.card.wide { flex-basis: 100%; }
+
+.card h3 { margin: 0 0 0.5rem; font-size: 0.9rem; color: #555; }
+
+.actions { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+
+.filters { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+
+button {
+  background: #1a5fb4;
+  color: #fff;
+  border: 0;
+  padding: 0.5rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover { background: #15518f; }
+
+button.danger { background: #c0392b; }
+
+input, select {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid #c6ccd2;
+  border-radius: 6px;
+}
+
+table { width: 100%; border-collapse: collapse; background: #fff; }
+
+th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #eef0f2; font-size: 0.9rem; }
+
+th { color: #555; font-weight: 600; }
+
+.status-claimed { color: #1a7f37; }
+.status-already_owned { color: #7a5900; }
+.status-failed { color: #c0392b; }
+.status-skipped { color: #888; }
+
+.badge { padding: 0.15rem 0.45rem; border-radius: 10px; background: #eef0f2; font-size: 0.8rem; }
+
+.badge.active { background: #d4edda; }
+.badge.needs_intervention, .badge.needs_authentication, .badge.paused { background: #fde2e2; color: #a11; }
+
+label { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.75rem; font-size: 0.9rem; }
+
+iframe { border: 1px solid #e2e5e9; border-radius: 8px; background: #fff; }
+
+.muted { color: #777; font-size: 0.85rem; }
+
+@media (max-width: 640px) {
+  header { flex-direction: column; gap: 0.5rem; }
+  main { padding: 0 0.5rem; }
 }

@@ -2,14 +2,127 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Epic Reclaim</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main>
+  <header>
     <h1>Epic Reclaim</h1>
-    <p id="health">Checking health...</p>
+    <nav>
+      <button data-view="dashboard" class="active">Dashboard</button>
+      <button data-view="accounts">Accounts</button>
+      <button data-view="history">History</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-dashboard">
+      <div class="cards">
+        <div class="card">
+          <h3>Health</h3>
+          <p id="health-status">...</p>
+        </div>
+        <div class="card">
+          <h3>Scheduler</h3>
+          <p id="scheduler-status">...</p>
+          <p id="next-run">...</p>
+        </div>
+        <div class="card">
+          <h3>Last run</h3>
+          <p id="last-run">...</p>
+        </div>
+        <div class="card">
+          <h3>Interventions</h3>
+          <p id="interventions">...</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="run-now">Run now</button>
+        <p id="run-feedback"></p>
+      </div>
+      <div class="cards">
+        <div class="card wide">
+          <h3>Recent claims</h3>
+          <table id="recent-claims">
+            <thead><tr><th>Game</th><th>Status</th><th>Updated</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="card wide">
+          <h3>Recent runs</h3>
+          <table id="recent-runs">
+            <thead><tr><th>Id</th><th>Trigger</th><th>Status</th><th>Games</th><th>Claims</th><th>Errors</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-accounts" hidden>
+      <div class="actions">
+        <input id="new-account-name" placeholder="Display name">
+        <button id="add-account">Add account</button>
+      </div>
+      <table id="accounts-table">
+        <thead>
+          <tr><th>Name</th><th>State</th><th>Enabled</th><th>Order</th><th>Actions</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div id="auth-panel" hidden>
+        <h3>Interactive authentication</h3>
+        <p>Complete the login in the server browser below, then wait for confirmation.</p>
+        <iframe id="auth-screen" width="100%" height="420"></iframe>
+        <p id="auth-status"></p>
+        <button id="auth-close">Close and revoke</button>
+      </div>
+    </section>
+
+    <section id="view-history" hidden>
+      <div class="filters">
+        <select id="history-account"><option value="">All accounts</option></select>
+        <select id="history-status">
+          <option value="">All statuses</option>
+          <option value="claimed">claimed</option>
+          <option value="already_owned">already_owned</option>
+          <option value="failed">failed</option>
+          <option value="skipped">skipped</option>
+        </select>
+        <button id="export-csv">Export CSV</button>
+        <button id="export-json">Export JSON</button>
+      </div>
+      <table id="history-table">
+        <thead>
+          <tr><th>Account</th><th>Game</th><th>Status</th><th>Attempts</th><th>Updated</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <section id="view-settings" hidden>
+      <form id="settings-form">
+        <label>Scheduler enabled
+          <select id="settings-scheduler-enabled"><option value="true">Yes</option><option value="false">No</option></select>
+        </label>
+        <label>Interval (seconds)
+          <input type="number" id="settings-interval">
+        </label>
+        <label>Claim delay min (seconds)
+          <input type="number" step="0.1" id="settings-delay-min">
+        </label>
+        <label>Claim delay max (seconds)
+          <input type="number" step="0.1" id="settings-delay-max">
+        </label>
+        <label>Telegram enabled
+          <select id="settings-telegram"><option value="true">Yes</option><option value="false">No</option></select>
+        </label>
+        <button type="submit">Save settings</button>
+      </form>
+    </section>
   </main>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
@@ -218,6 +219,57 @@ def list_claims(
         }
         for claim in claims
     ]
+
+
+@router.get("/claims/export")
+def export_claims(
+    request: Request,
+    account_id: int | None = None,
+    status: str | None = None,
+    since: str | None = None,
+    format: str = "csv",
+):
+    from io import StringIO
+
+    from fastapi.responses import Response
+
+    with _db(request).connect() as connection:
+        claims = request.app.state.claims_repository.list(
+            connection, account_id=account_id, status=status, since=since
+        )
+        games = {g.id: g for g in request.app.state.games_repository.list(connection)}
+
+    rows = [
+        {
+            "account_id": claim.account_id,
+            "game": games.get(claim.game_id).name if claim.game_id in games else "",
+            "status": claim.status,
+            "attempts": claim.attempts,
+            "error": claim.error or "",
+            "claimed_at": claim.claimed_at or "",
+            "updated_at": claim.updated_at,
+        }
+        for claim in claims
+    ]
+
+    if format == "json":
+        return Response(
+            json.dumps(rows, ensure_ascii=True),
+            media_type="application/json",
+            headers={"Content-Disposition": "attachment; filename=claims.json"},
+        )
+
+    import csv
+
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(rows[0].keys()) if rows else ["account_id", "game", "status", "attempts", "error", "claimed_at", "updated_at"])
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=claims.csv"},
+    )
 
 
 # Runs

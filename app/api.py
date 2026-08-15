@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.domain.errors import NotFoundError
 from app.domain.models import AccountState, RunTrigger
+from app.services.backup_service import BackupError, export_backup, import_backup
 
 router = APIRouter(prefix="/api")
 
@@ -349,6 +350,38 @@ def trigger_run(request: Request):
     if outcome.status == "conflict":
         raise HTTPException(status_code=409, detail=outcome.error)
     return {"run_id": outcome.run_id, "status": outcome.status}
+
+
+# Backup / restore
+
+
+@router.get("/backup")
+def download_backup(request: Request):
+    from fastapi.responses import Response
+
+    with _db(request).connect() as connection:
+        payload = export_backup(connection)
+    return Response(
+        json.dumps(payload, ensure_ascii=True, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=epic-reclaim-backup.json"},
+    )
+
+
+@router.post("/backup/import")
+async def upload_backup(request: Request, overwrite: bool = False):
+    from fastapi.responses import JSONResponse
+
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="invalid JSON body")
+    try:
+        with _db(request).connect() as connection:
+            restored = import_backup(connection, payload, overwrite=overwrite)
+    except BackupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return JSONResponse({"restored_rows": restored})
 
 
 # Settings

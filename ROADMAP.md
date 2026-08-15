@@ -190,19 +190,19 @@ El orden prioriza:
 
 **Objetivo:** ejecutar el producto de forma persistente en Docker y fuera de Docker.
 
-- [ ] Implementar backup de SQLite y configuración no secreta.
-- [ ] Excluir perfiles, cookies, tokens y sesiones de backups normales.
-- [ ] Implementar importación con validación de formato y versión.
-- [ ] Exigir confirmación explícita y evitar sobrescritura silenciosa.
-- [ ] Crear `Dockerfile` con frontend compilado, backend, dependencias y Chromium.
-- [ ] Crear `docker-compose.yml` con volúmenes para database, sessions y state.
-- [ ] Configurar el puerto publicado a partir de `APP_PORT`, por defecto `8765`.
-- [ ] Verificar reinicio/recreación del contenedor sin pérdida de DB ni sesiones.
-- [ ] Documentar ejecución Docker, no Docker, Playwright/Chromium y frontend.
-- [ ] Documentar LAN/Tailscale, cambio de puerto, permisos, actualización y reinicio.
-- [ ] Documentar backup/restore, pérdida de sesiones y reautenticación posterior.
-- [ ] Documentar troubleshooting de puerto, Chromium, auth, Telegram, DB y volúmenes.
-- [ ] Probar instalación limpia desde clone usando solo la documentación.
+- [x] Implementar backup de SQLite y configuración no secreta.
+- [x] Excluir perfiles, cookies, tokens y sesiones de backups normales.
+- [x] Implementar importación con validación de formato y versión.
+- [x] Exigir confirmación explícita y evitar sobrescritura silenciosa.
+- [x] Crear `Dockerfile` con frontend compilado, backend, dependencias y Chromium.
+- [x] Crear `docker-compose.yml` con volúmenes para database, sessions y state.
+- [x] Configurar el puerto publicado a partir de `APP_PORT`, por defecto `8765`.
+- [ ] Verificar reinicio/recreación del contenedor sin pérdida de DB ni sesiones (requiere Docker en el entorno de despliegue).
+- [x] Documentar ejecución Docker, no Docker, Playwright/Chromium y frontend.
+- [x] Documentar LAN/Tailscale, cambio de puerto, permisos, actualización y reinicio.
+- [x] Documentar backup/restore, pérdida de sesiones y reautenticación posterior.
+- [x] Documentar troubleshooting de puerto, Chromium, auth, Telegram, DB y volúmenes.
+- [ ] Probar instalación limpia desde clone usando solo la documentación (requiere el entorno de despliegue).
 
 **Criterio de salida:** el sistema funciona en un servidor doméstico con Docker y tiene una ruta documentada para ejecución no Docker y recuperación de datos.
 

@@ -1,0 +1,23 @@
+services:
+  epic-reclaim:
+    build: .
+    image: epic-reclaim:1.0.0
+    container_name: epic-reclaim
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${APP_PORT:-8765}:8765"
+    volumes:
+      - database:/app/data/database
+      - sessions:/app/data/sessions
+      - state:/app/data/state
+    environment:
+      - DATABASE_PATH=/app/data/database/epic.db
+      - SESSIONS_PATH=/app/data/sessions
+      - STATE_PATH=/app/data/state
+
+volumes:
+  database:
+  sessions:
+  state:

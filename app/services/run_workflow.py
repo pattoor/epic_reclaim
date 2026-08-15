@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Any, Callable
 
 from app.domain.errors import (
     AccountBlockedError,
@@ -73,7 +73,7 @@ class RunWorkflow:
         settings_provider: Callable[[object], object],
         delay_between_actions: Callable[[], None] | None = None,
         sleeper: Sleeper = time.sleep,
-        notifier: Callable[[RunOutcome], None] | None = None,
+        notifier: Any | None = None,
     ):
         self._database = database
         self._adapter = adapter
@@ -262,7 +262,7 @@ class RunWorkflow:
             accounts_processed=counters["accounts_processed"],
         )
         if self._notifier is not None:
-            self._notifier(outcome)
+            self._notifier.notify_run_summary(outcome)
         return outcome
 
     def _process_game(
@@ -407,6 +407,8 @@ class RunWorkflow:
             message=reason,
         )
         logger.warning("account_%s paused: %s", account_id, reason)
+        if self._notifier is not None:
+            self._notifier.notify_alert(f"account {account_id} paused ({state}): {reason}")
 
     def _record_claim(
         self,

@@ -148,6 +148,9 @@ def resolve_intervention(account_id: int, request: Request):
     try:
         with _db(request).connect() as connection:
             account = _account_service(request).resolve_intervention(connection, account_id)
+        notifier = getattr(request.app.state, "notifier", None)
+        if notifier is not None:
+            notifier.notify_resolved(f"account {account_id} back to active")
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return {

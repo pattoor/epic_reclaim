@@ -17,6 +17,7 @@ from .database import Database
 from .integrations.auth_browser import PlaywrightAuthBrowser
 from .integrations.epic_playwright import PlaywrightEpicAdapter
 from .integrations.remote_screen import NoVNCProvider
+from .integrations.telegram import TelegramNotifier
 from .logging_config import configure_logging
 from .repositories import (
     AccountsRepository,
@@ -73,6 +74,7 @@ def create_app(
         sessions_path=settings.sessions_path,
     )
     settings_service = SettingsService(settings, settings_repo)
+    notifier = TelegramNotifier(settings_service, database)
 
     def settings_provider(connection):
         return settings_service.load(connection)
@@ -100,6 +102,7 @@ def create_app(
         lock=RunLock(),
         settings_provider=settings_provider,
         delay_between_actions=delay_between_actions,
+        notifier=notifier,
     )
     scheduler = Scheduler(workflow, settings_service, database)
 
@@ -113,6 +116,7 @@ def create_app(
         app.state.account_service = account_service
         app.state.auth_service = auth_service
         app.state.settings_service = settings_service
+        app.state.notifier = notifier
         app.state.workflow = workflow
         app.state.accounts_repository = accounts_repo
         app.state.games_repository = games_repo

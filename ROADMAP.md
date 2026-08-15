@@ -175,14 +175,14 @@ El orden prioriza:
 
 **Objetivo:** añadir notificaciones sin convertirlas en una dependencia del producto.
 
-- [ ] Implementar Telegram solo cuando esté habilitado y configurado.
-- [ ] Enviar resumen de ejecución con cuentas, juegos y resultados.
-- [ ] Enviar alertas de CAPTCHA, MFA, cuenta pausada y fallos significativos.
-- [ ] Evitar spam mediante deduplicación o agrupación de alertas.
-- [ ] Marcar como resueltas las acciones de intervención antiguas después de recuperar la cuenta.
-- [ ] Documentar workflow n8n `Schedule Trigger -> POST /api/runs`.
-- [ ] Verificar que el sistema funciona igual sin Telegram ni n8n.
-- [ ] Crear tests de Telegram deshabilitado, errores de integración y resumen sin secretos.
+- [x] Implementar Telegram solo cuando esté habilitado y configurado.
+- [x] Enviar resumen de ejecución con cuentas, juegos y resultados.
+- [x] Enviar alertas de CAPTCHA, MFA, cuenta pausada y fallos significativos.
+- [x] Evitar spam mediante deduplicación o agrupación de alertas.
+- [x] Marcar como resueltas las acciones de intervención antiguas después de recuperar la cuenta.
+- [x] Documentar workflow n8n `Schedule Trigger -> POST /api/runs`.
+- [x] Verificar que el sistema funciona igual sin Telegram ni n8n.
+- [x] Crear tests de Telegram deshabilitado, errores de integración y resumen sin secretos.
 
 **Criterio de salida:** Telegram y n8n mejoran la operación, pero eliminarlos no rompe dashboard, scheduler, API, historial ni claims.
 

@@ -38,16 +38,16 @@ El orden prioriza:
 
 **Objetivo:** iniciar la aplicación, comprobar su salud y cargar configuración sin secretos.
 
-- [ ] Crear la estructura backend, frontend, tests y despliegue indicada en `ARCHITECTURE.md`.
-- [ ] Configurar el entorno Python y `requirements.txt`.
-- [ ] Crear `.env.example` con `APP_HOST`, `APP_PORT`, `DATABASE_PATH`, `SESSIONS_PATH` y opciones de integraciones.
-- [ ] Crear o revisar `.gitignore` para excluir `.env`, sesiones, bases locales y artefactos de build.
-- [ ] Implementar validación centralizada de configuración.
-- [ ] Crear FastAPI con ciclo de vida explícito de startup/shutdown.
-- [ ] Inicializar SQLite con foreign keys activas y migración inicial segura.
-- [ ] Configurar logging estructurado con filtrado de secretos.
-- [ ] Implementar `GET /health` para aplicación, SQLite y Playwright sin tráfico a Epic.
-- [ ] Crear tests unitarios de configuración y tests de integración para health/database.
+- [x] Crear la estructura backend, frontend, tests y despliegue indicada en `ARCHITECTURE.md`.
+- [x] Configurar el entorno Python y `requirements.txt`.
+- [x] Crear `.env.example` con `APP_HOST`, `APP_PORT`, `DATABASE_PATH`, `SESSIONS_PATH` y opciones de integraciones.
+- [x] Crear o revisar `.gitignore` para excluir `.env`, sesiones, bases locales y artefactos de build.
+- [x] Implementar validación centralizada de configuración.
+- [x] Crear FastAPI con ciclo de vida explícito de startup/shutdown.
+- [x] Inicializar SQLite con foreign keys activas y migración inicial segura.
+- [x] Configurar logging estructurado con filtrado de secretos.
+- [x] Implementar `GET /health` para aplicación, SQLite y Playwright sin tráfico a Epic.
+- [x] Crear tests unitarios de configuración y tests de integración para health/database.
 
 **Criterio de salida:** la aplicación arranca con `.env.example`, devuelve un health válido y falla con mensajes claros ante configuración inválida.
 

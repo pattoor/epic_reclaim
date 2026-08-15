@@ -23,12 +23,14 @@ class FakeScreen(RemoteScreen):
         self._available = available
         self.started = False
         self.stopped = False
+        self.password = None
 
     def available(self) -> bool:
         return self._available
 
-    def start(self) -> str | None:
+    def start(self, password: str) -> str | None:
         self.started = True
+        self.password = password
         return ":99" if self._available else None
 
     def screen_url(self, token: str | None = None) -> str | None:

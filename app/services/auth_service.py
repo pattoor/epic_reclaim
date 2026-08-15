@@ -18,6 +18,7 @@ class AuthSession:
     screen_url: str | None
     status: str  # running | completed | failed | unavailable
     error: str | None = None
+    vnc_password: str | None = None
 
 
 class AuthService:
@@ -63,13 +64,15 @@ class AuthService:
                 error="remote screen not available",
             )
 
-        display = self._screen.start()
+        vnc_password = secrets.token_urlsafe(16)
+        display = self._screen.start(vnc_password)
         token = secrets.token_urlsafe(24)
         session = AuthSession(
             token=token,
             account_id=account_id,
             screen_url=self._screen.screen_url(token),
             status="running",
+            vnc_password=vnc_password,
         )
         self._sessions[session.token] = session
         thread = threading.Thread(
@@ -96,13 +99,15 @@ class AuthService:
 
     def _complete(self, session: AuthSession, outcome) -> None:
         with self._database.connect() as connection:
+            account = self._repository.get(connection, session.account_id)
             if outcome.success:
+                display_name = outcome.display_name or account.display_name
                 self._repository.update(
                     connection,
                     session.account_id,
                     state=AccountState.ACTIVE,
                     epic_identity=outcome.epic_identity,
-                    display_name=outcome.display_name,
+                    display_name=display_name,
                     last_block_reason=None,
                 )
                 session.status = "completed"

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 
 class RemoteScreen(ABC):
@@ -11,7 +13,7 @@ class RemoteScreen(ABC):
         pass
 
     @abstractmethod
-    def start(self) -> str | None:
+    def start(self, password: str) -> str | None:
         pass
 
     @abstractmethod
@@ -24,20 +26,44 @@ class RemoteScreen(ABC):
 
 
 class NoVNCProvider(RemoteScreen):
-    """Runs Xvfb + x11vnc + websockify to expose a headed browser via noVNC."""
+    """Runs Xvfb + x11vnc + websockify to expose a headed browser via noVNC.
 
-    def __init__(self, display: str = ":99", vnc_port: int = 5900, ws_port: int = 6080):
+    VNC is protected with a per-session password (never -nopw). websockify
+    serves the noVNC web client from NOVNC_WEB_DIR (or the system path) so the
+    dashboard can embed the remote browser page.
+    """
+
+    def __init__(
+        self,
+        display: str = ":99",
+        vnc_port: int = 5900,
+        ws_port: int = 6080,
+        novnc_web_dir: str | None = None,
+    ):
         self._display = display
         self._vnc_port = vnc_port
         self._ws_port = ws_port
+        self._novnc_web_dir = novnc_web_dir or "/usr/share/novnc"
         self._processes: list[subprocess.Popen] = []
+        self._passfile: Path | None = None
 
     def available(self) -> bool:
-        return all(shutil.which(tool) for tool in ("Xvfb", "x11vnc", "websockify"))
+        tools = ("Xvfb", "x11vnc", "websockify")
+        if not all(shutil.which(tool) for tool in tools):
+            return False
+        if not Path(self._novnc_web_dir).is_dir():
+            return False
+        return True
 
-    def start(self) -> str | None:
+    def start(self, password: str) -> str | None:
         if not self.available():
             return None
+
+        fd, passfile = tempfile.mkstemp(prefix="epic-reclaim-vnc-")
+        with Path(passfile).open("w") as handle:
+            handle.write(password)
+        self._passfile = Path(passfile)
+
         xvfb = subprocess.Popen(
             ["Xvfb", self._display, "-screen", "0", "1280x800x24"],
             stdout=subprocess.DEVNULL,
@@ -48,7 +74,8 @@ class NoVNCProvider(RemoteScreen):
                 "x11vnc",
                 "-display",
                 self._display,
-                "-nopw",
+                "-rfbauth",
+                passfile,
                 "-forever",
                 "-rfbport",
                 str(self._vnc_port),
@@ -61,6 +88,8 @@ class NoVNCProvider(RemoteScreen):
                 "websockify",
                 str(self._ws_port),
                 f"localhost:{self._vnc_port}",
+                "--web",
+                self._novnc_web_dir,
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -78,3 +107,9 @@ class NoVNCProvider(RemoteScreen):
         for process in self._processes:
             process.terminate()
         self._processes = []
+        if self._passfile is not None:
+            try:
+                self._passfile.unlink()
+            except FileNotFoundError:
+                pass
+            self._passfile = None

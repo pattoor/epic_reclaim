@@ -155,6 +155,50 @@ def test_auth_rejects_second_concurrent_flow_for_account(tmp_path):
     assert "already running" in (second.error or "")
 
 
+def test_auth_success_preserves_display_name_when_not_extracted(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Mi cuenta")
+
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(
+            AuthOutcome(success=True, epic_identity="id-9", display_name=None)
+        ),
+        screen=FakeScreen(available=True),
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id)
+    _wait(lambda: session.status != "running")
+
+    with database.connect() as connection:
+        stored = accounts.get(connection, account.id)
+    assert stored.state == AccountState.ACTIVE
+    assert stored.display_name == "Mi cuenta"
+    assert stored.epic_identity == "id-9"
+
+
+def test_auth_screen_uses_session_vnc_password(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    screen = FakeScreen(available=True)
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=screen,
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id)
+    assert session.vnc_password is not None
+    assert screen.password == session.vnc_password
+
+
 def _wait(predicate, timeout_seconds: float = 5):
     deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:

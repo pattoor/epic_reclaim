@@ -14,7 +14,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
     && playwright install chromium --with-deps \
     && apt-get update && apt-get install -y --no-install-recommends \
-        xvfb x11vnc websockify \
+        xvfb x11vnc websockify novnc \
     && rm -rf /var/lib/apt/lists/*
 
 COPY app ./app

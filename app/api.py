@@ -31,6 +31,25 @@ class SettingsUpdate(BaseModel):
     telegram_enabled: bool | None = None
 
 
+def _validate_settings_update(request: Request, updates: dict) -> None:
+    with _db(request).connect() as connection:
+        effective = _settings_service(request).load(connection)
+
+    interval = updates.get("scheduler_interval_seconds", effective.scheduler_interval_seconds)
+    if interval < 1:
+        raise HTTPException(status_code=422, detail="scheduler_interval_seconds must be >= 1")
+
+    delay_min = updates.get("claim_delay_min_seconds", effective.claim_delay_min_seconds)
+    delay_max = updates.get("claim_delay_max_seconds", effective.claim_delay_max_seconds)
+    if delay_min < 0:
+        raise HTTPException(status_code=422, detail="claim_delay_min_seconds must be >= 0")
+    if delay_max < delay_min:
+        raise HTTPException(
+            status_code=422,
+            detail="claim_delay_max_seconds must be >= claim_delay_min_seconds",
+        )
+
+
 def _state(request: Request):
     return request.app.state
 
@@ -120,7 +139,12 @@ def update_account(account_id: int, body: AccountUpdate, request: Request):
 
 
 @router.delete("/accounts/{account_id}")
-def delete_account(account_id: int, request: Request):
+def delete_account(account_id: int, request: Request, confirm: bool = False):
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="permanent deletion requires confirm=true",
+        )
     try:
         with _db(request).connect() as connection:
             _account_service(request).delete(connection, account_id)
@@ -188,16 +212,22 @@ def auth_screen(request: Request, token: str, port: int = 6080):
     session = _auth_service(request).get(token)
     if session is None:
         raise HTTPException(status_code=404, detail="session not found")
+    password = session.vnc_password or ""
     html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Epic Reclaim auth</title></head>
 <body style="margin:0;font-family:system-ui,sans-serif;background:#1a1a1a;color:#eee">
-<script>window.epicReclaimNoVncPort = {port};</script>
-<iframe id="vnc" width="100%" height="100%" style="border:0;min-height:100vh" title="remote browser"></iframe>
 <script>
 (function() {{
   var host = window.location.hostname;
-  var el = document.getElementById('vnc');
-  el.src = 'http://' + host + ':{port}/vnc.html?autoconnect=true&resize=scale';
+  var url = 'http://' + host + ':{port}/vnc.html?autoconnect=true&resize=scale&password=' + encodeURIComponent('{password}');
+  var frame = document.createElement('iframe');
+  frame.src = url;
+  frame.width = '100%';
+  frame.height = '100%';
+  frame.style.border = '0';
+  frame.style.minHeight = '100vh';
+  frame.title = 'remote browser';
+  document.body.appendChild(frame);
 }})();
 </script>
 </body></html>"""
@@ -453,6 +483,7 @@ def update_settings(body: SettingsUpdate, request: Request):
         "telegram_enabled": body.telegram_enabled,
     }
     updates = {key: value for key, value in updates.items() if value is not None}
+    _validate_settings_update(request, updates)
     with _db(request).connect() as connection:
         _settings_service(request).update(connection, updates, _EDITABLE_KEYS)
         effective = _settings_service(request).load(connection)

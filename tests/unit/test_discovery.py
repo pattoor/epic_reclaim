@@ -1,6 +1,7 @@
 from app.database import Database
 from app.integrations.epic_adapter import GameCandidate
-from app.integrations.epic_playwright import classify_offer
+from app.integrations.epic_playwright import classify_offer, classify_playwright_error
+from app.domain.errors import TransientError
 from app.repositories import GamesRepository
 from app.services.discovery_service import DiscoveryService
 from tests.fakes import FakeEpicAdapter
@@ -37,6 +38,16 @@ def test_classify_offer_rejects_paid_price():
 def test_classify_offer_rejects_paid_cta_even_with_free_price():
     assert classify_offer("Tricky", None, price="Free", cta="Buy Now") is None
     assert classify_offer("Tricky", None, price="Free", cta="Add to Cart") is None
+
+
+def test_playwright_timeout_is_transient():
+    classified = classify_playwright_error(TimeoutError("page timeout"))
+    assert isinstance(classified, TransientError)
+
+
+def test_unknown_playwright_error_is_not_marked_transient():
+    error = ValueError("unexpected selector state")
+    assert classify_playwright_error(error) is error
 
 
 def test_discovery_persists_games(tmp_path):

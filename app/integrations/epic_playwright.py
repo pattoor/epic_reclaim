@@ -53,6 +53,14 @@ def _has_free_signal(price: str | None, cta: str | None, badge: str | None) -> b
     return any(marker in signals for marker in _FREE_SIGNAL)
 
 
+def classify_playwright_error(error: Exception) -> Exception:
+    name = type(error).__name__.lower()
+    message = str(error).lower()
+    if any(marker in name or marker in message for marker in ("timeout", "network", "connection")):
+        return TransientError("temporary Playwright or network failure")
+    return error
+
+
 def classify_offer(
     title: str,
     status_badge: str | None,
@@ -101,64 +109,73 @@ class PlaywrightEpicAdapter(EpicAdapter):
         return path
 
     def discover_free_games(self) -> list[GameCandidate]:
-        with self._import_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            try:
-                page = browser.new_page()
-                page.goto(FREE_GAMES_URL, timeout=30000, wait_until="domcontentloaded")
-                page.wait_for_timeout(3000)
-                page_text = page.inner_text("body")
-                condition = _is_security_condition(page_text)
-                if condition == Outcome.INTERVENTION:
-                    raise InterventionRequiredError("captcha detected during discovery")
-                if condition == Outcome.RATE_LIMITED:
-                    raise RateLimitError("rate limited during discovery")
+        try:
+            with self._import_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(FREE_GAMES_URL, timeout=30000, wait_until="domcontentloaded")
+                    page.wait_for_timeout(3000)
+                    page_text = page.inner_text("body")
+                    condition = _is_security_condition(page_text)
+                    if condition == Outcome.INTERVENTION:
+                        raise InterventionRequiredError("captcha detected during discovery")
+                    if condition == Outcome.RATE_LIMITED:
+                        raise RateLimitError("rate limited during discovery")
 
-                candidates: list[GameCandidate] = []
-                offers = page.query_selector_all(
-                    "a[href*='/p/']:has([data-testid='OfferTitle'])"
-                )
-                for offer in offers:
-                    title_el = offer.query_selector("[data-testid='OfferTitle']")
-                    if title_el is None:
-                        continue
-                    title = title_el.inner_text().strip()
-                    price_el = offer.query_selector(
-                        "[data-testid='OfferPrice'], [data-testid='Price']"
+                    candidates: list[GameCandidate] = []
+                    offers = page.query_selector_all(
+                        "a[href*='/p/']:has([data-testid='OfferTitle'])"
                     )
-                    price = price_el.inner_text().strip() if price_el else None
-                    badge_el = offer.query_selector("[data-testid='OfferStatus']")
-                    badge = badge_el.inner_text().strip() if badge_el else None
-                    cta_el = offer.query_selector(
-                        "[data-testid='CTAButton'], button"
-                    )
-                    cta = cta_el.inner_text().strip() if cta_el else None
-                    candidate = classify_offer(title, badge, price=price, cta=cta)
-                    if candidate is None:
-                        continue
-                    href = offer.get_attribute("href") or ""
-                    epic_id = None
-                    if "/p/" in href:
-                        slug = href.split("/p/", 1)[1].rstrip("/")
-                        epic_id = slug or None
-                    candidates.append(
-                        GameCandidate(
-                            epic_id=epic_id,
-                            name=title,
-                            url="https://store.epicgames.com" + href,
+                    for offer in offers:
+                        title_el = offer.query_selector("[data-testid='OfferTitle']")
+                        if title_el is None:
+                            continue
+                        title = title_el.inner_text().strip()
+                        price_el = offer.query_selector(
+                            "[data-testid='OfferPrice'], [data-testid='Price']"
                         )
-                    )
-                return candidates
-            finally:
-                browser.close()
+                        price = price_el.inner_text().strip() if price_el else None
+                        badge_el = offer.query_selector("[data-testid='OfferStatus']")
+                        badge = badge_el.inner_text().strip() if badge_el else None
+                        cta_el = offer.query_selector(
+                            "[data-testid='CTAButton'], button"
+                        )
+                        cta = cta_el.inner_text().strip() if cta_el else None
+                        candidate = classify_offer(title, badge, price=price, cta=cta)
+                        if candidate is None:
+                            continue
+                        href = offer.get_attribute("href") or ""
+                        epic_id = None
+                        if "/p/" in href:
+                            slug = href.split("/p/", 1)[1].rstrip("/")
+                            epic_id = slug or None
+                        candidates.append(
+                            GameCandidate(
+                                epic_id=epic_id,
+                                name=title,
+                                url="https://store.epicgames.com" + href,
+                            )
+                        )
+                    return candidates
+                finally:
+                    browser.close()
+        except (InterventionRequiredError, RateLimitError, TransientError):
+            raise
+        except Exception as error:
+            raise classify_playwright_error(error) from error
 
     def open_account_session(self, account_id: int) -> AccountSession:
         playwright = self._import_playwright()
-        context = playwright.chromium.launch_persistent_context(
-            user_data_dir=str(self._profile_path(account_id)),
-            headless=True,
-        )
-        return PlaywrightSession(context, playwright)
+        try:
+            context = playwright.chromium.launch_persistent_context(
+                user_data_dir=str(self._profile_path(account_id)),
+                headless=True,
+            )
+            return PlaywrightSession(context, playwright)
+        except Exception as error:
+            playwright.stop()
+            raise classify_playwright_error(error) from error
 
     def _active_page(self, session: AccountSession):
         if session.context.pages:
@@ -166,38 +183,74 @@ class PlaywrightEpicAdapter(EpicAdapter):
         return session.context.new_page()
 
     def is_owned(self, session: AccountSession, game: GameCandidate) -> bool:
-        page = self._active_page(session)
-        page.goto(game.url, timeout=30000, wait_until="domcontentloaded")
-        page.wait_for_timeout(2000)
-        text = page.inner_text("body").lower()
-        condition = _is_security_condition(text)
-        if condition == Outcome.INTERVENTION:
-            raise InterventionRequiredError("captcha detected during ownership check")
-        if condition == Outcome.RATE_LIMITED:
-            raise RateLimitError("rate limited during ownership check")
-        return "in library" in text
+        try:
+            page = self._active_page(session)
+            page.goto(game.url, timeout=30000, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            text = page.inner_text("body").lower()
+            condition = _is_security_condition(text)
+            if condition == Outcome.INTERVENTION:
+                raise InterventionRequiredError("captcha detected during ownership check")
+            if condition == Outcome.RATE_LIMITED:
+                raise RateLimitError("rate limited during ownership check")
+            return _has_library_marker(page)
+        except (InterventionRequiredError, RateLimitError):
+            raise
+        except Exception as error:
+            raise classify_playwright_error(error) from error
 
     def claim(self, session: AccountSession, game: GameCandidate) -> ClaimResult:
-        page = self._active_page(session)
-        page.goto(game.url, timeout=30000, wait_until="domcontentloaded")
-        page.wait_for_timeout(2000)
-        text = page.inner_text("body").lower()
-        condition = _is_security_condition(text)
-        if condition == Outcome.INTERVENTION:
-            raise InterventionRequiredError("captcha detected during claim")
-        if condition == Outcome.RATE_LIMITED:
-            raise RateLimitError("rate limited during claim")
+        try:
+            page = self._active_page(session)
+            page.goto(game.url, timeout=30000, wait_until="domcontentloaded")
+            page.wait_for_timeout(2000)
+            text = page.inner_text("body").lower()
+            condition = _is_security_condition(text)
+            if condition == Outcome.INTERVENTION:
+                raise InterventionRequiredError("captcha detected during claim")
+            if condition == Outcome.RATE_LIMITED:
+                raise RateLimitError("rate limited during claim")
 
-        if "in library" in text:
-            return ClaimResult(outcome=Outcome.ALREADY_OWNED)
-        if "get" in text:
-            page.click("text=Get", timeout=15000)
+            if _has_library_marker(page):
+                return ClaimResult(outcome=Outcome.ALREADY_OWNED)
+            cta = _find_get_cta(page)
+            if cta is None:
+                return ClaimResult(outcome=Outcome.TRANSIENT, error="claim CTA not found")
+            cta.click(timeout=15000)
             page.wait_for_timeout(3000)
-            confirmed = page.inner_text("body").lower()
-            if "in library" in confirmed or "owned" in confirmed:
+            if _has_library_marker(page):
                 return ClaimResult(outcome=Outcome.CLAIMED)
             return ClaimResult(outcome=Outcome.TRANSIENT, error="claim not confirmed")
-        return ClaimResult(outcome=Outcome.ALREADY_OWNED)
+        except (InterventionRequiredError, RateLimitError):
+            raise
+        except Exception as error:
+            raise classify_playwright_error(error) from error
 
     def authenticate(self, account_id: int, mode: str) -> AuthProgress:
         raise NotImplementedError("interactive authentication implemented in auth service")
+
+
+def _has_library_marker(page) -> bool:
+    for locator in (
+        page.get_by_role("button", name="In Library", exact=True),
+        page.get_by_text("In Library", exact=True),
+    ):
+        try:
+            if locator.is_visible(timeout=1000):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _find_get_cta(page):
+    for locator in (
+        page.get_by_role("button", name="Get", exact=True),
+        page.get_by_text("Get", exact=True),
+    ):
+        try:
+            if locator.is_visible(timeout=1000):
+                return locator
+        except Exception:
+            continue
+    return None

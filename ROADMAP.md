@@ -90,18 +90,18 @@ El orden prioriza:
 
 **Objetivo:** permitir autenticar y reautenticar cuentas en un navegador que corre en el servidor.
 
-- [ ] Crear un perfil persistente por cuenta en `SESSIONS_PATH/{account_id}`.
-- [ ] Implementar apertura y cierre seguro del contexto Playwright.
-- [ ] Implementar `POST /api/accounts/{id}/authenticate` para iniciar autenticación.
-- [ ] Implementar reautenticación usando el mismo flujo sin almacenar contraseñas.
-- [ ] Ejecutar Chromium headed mediante VNC/noVNC de vida corta dentro del despliegue definido.
-- [ ] Entregar un token de sesión de un solo uso para el panel remoto y revocarlo al terminar.
-- [ ] Evitar exponer CDP, cookies, tokens o el perfil persistente.
-- [ ] Detectar autenticación exitosa, timeout, cierre, sesión expirada, CAPTCHA y MFA.
-- [ ] Cambiar la cuenta a `active`, `needs_authentication` o `needs_intervention` según el resultado.
-- [ ] Cerrar navegador y pantalla remota después de completar o abandonar la autenticación.
-- [ ] Exponer la disponibilidad de Chromium y del mecanismo remoto en `/health`.
-- [ ] Crear tests con Playwright fake y una prueba manual documentada de login/MFA/CAPTCHA.
+- [x] Crear un perfil persistente por cuenta en `SESSIONS_PATH/{account_id}`.
+- [x] Implementar apertura y cierre seguro del contexto Playwright.
+- [x] Implementar `POST /api/accounts/{id}/authenticate` para iniciar autenticación.
+- [x] Implementar reautenticación usando el mismo flujo sin almacenar contraseñas.
+- [x] Ejecutar Chromium headed mediante VNC/noVNC de vida corta dentro del despliegue definido.
+- [x] Entregar un token de sesión de un solo uso para el panel remoto y revocarlo al terminar.
+- [x] Evitar exponer CDP, cookies, tokens o el perfil persistente.
+- [x] Detectar autenticación exitosa, timeout, cierre, sesión expirada, CAPTCHA y MFA.
+- [x] Cambiar la cuenta a `active`, `needs_authentication` o `needs_intervention` según el resultado.
+- [x] Cerrar navegador y pantalla remota después de completar o abandonar la autenticación.
+- [x] Exponer la disponibilidad de Chromium y del mecanismo remoto en `/health`.
+- [x] Crear tests con Playwright fake y una prueba manual documentada de login/MFA/CAPTCHA.
 
 **Criterio de salida:** una cuenta puede autenticarse manualmente desde el dashboard, conserva su sesión después de reiniciar y no expone credenciales ni cookies.
 

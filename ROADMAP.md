@@ -74,15 +74,15 @@ El orden prioriza:
 
 **Objetivo:** detectar juegos elegibles desde la sección oficial `Free Games` sin depender de una cantidad o calendario fijo.
 
-- [ ] Implementar `discover_free_games()` detrás de `EpicAdapter`.
-- [ ] Limitar la fuente a la sección oficial de juegos gratis de Epic.
-- [ ] Detectar cualquier cantidad de juegos disponibles en el momento de la ejecución.
-- [ ] Excluir juegos `coming soon`, descuentos, demos y contenido fuera de la sección objetivo.
-- [ ] Persistir identificador Epic cuando exista, nombre, URL y metadata técnica mínima.
-- [ ] Implementar upsert de juegos sin crear duplicados por detecciones repetidas.
-- [ ] Aislar selectores y navegación de Playwright en el módulo específico de Epic.
-- [ ] Crear fixtures y fakes para respuestas normales, cero juegos, varios juegos y contenido excluido.
-- [ ] Añadir tests de elegibilidad y de persistencia de detecciones.
+- [x] Implementar `discover_free_games()` detrás de `EpicAdapter`.
+- [x] Limitar la fuente a la sección oficial de juegos gratis de Epic.
+- [x] Detectar cualquier cantidad de juegos disponibles en el momento de la ejecución.
+- [x] Excluir juegos `coming soon`, descuentos, demos y contenido fuera de la sección objetivo.
+- [x] Persistir identificador Epic cuando exista, nombre, URL y metadata técnica mínima.
+- [x] Implementar upsert de juegos sin crear duplicados por detecciones repetidas.
+- [x] Aislar selectores y navegación de Playwright en el módulo específico de Epic.
+- [x] Crear fixtures y fakes para respuestas normales, cero juegos, varios juegos y contenido excluido.
+- [x] Añadir tests de elegibilidad y de persistencia de detecciones.
 
 **Criterio de salida:** una ejecución de descubrimiento produce una lista confiable de juegos elegibles sin contactar Epic en los tests normales.
 

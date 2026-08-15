@@ -68,69 +68,92 @@ El workflow de claims es unico: scheduler, boton `Run now` y API externa llaman 
 
 ## Requisitos
 
-- Linux/Debian recomendado.
+- Linux/Debian recomendado, con acceso por LAN o Tailscale.
 - Docker y Docker Compose para el despliegue recomendado.
 - Aproximadamente 4 GB de RAM en el servidor de referencia.
-- Para ejecucion local: Python, Node.js, dependencias del frontend y Chromium de Playwright.
-- Acceso LAN o Tailscale al puerto de la aplicacion.
+- Para ejecucion local: Python 3.12+ y Chromium de Playwright.
+- El dashboard es HTML/JS/CSS estatico servido por FastAPI; no requiere Node ni build step.
 
 El puerto por defecto es `8765`, pero es configurable y no se asume que este libre.
 
-## Inicio rapido con Docker
+## Ejecucion con Docker
 
 ```bash
 git clone <repository-url>
 cd epic_reclaim
 cp .env.example .env
+# editar .env con APP_PORT y demas opciones si se desea
 docker compose up -d --build
 ```
 
 Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor.
 
-Los volumenes deben conservar, como minimo:
+Los volumenes conservan:
 
-- Base de datos SQLite.
-- Perfiles persistentes de Playwright.
-- Estado requerido por la aplicacion.
+- Base de datos SQLite (`database`).
+- Perfiles persistentes de Playwright (`sessions`).
+- Estado de la aplicacion (`state`).
 
-Para cambiar el puerto publicado, ajustar `APP_PORT` o el mapeo correspondiente en Compose y reiniciar el servicio.
+Para cambiar el puerto publicado, ajustar `APP_PORT` en `.env` y reiniciar: `docker compose down && docker compose up -d`.
+
+### Detener y resetear
+
+```bash
+docker compose down            # detener
+docker compose down -v         # detener y borrar volumenes (RESET: pierde DB y sesiones)
+docker compose up -d --build   # reconstruir tras cambios
+```
+
+### Autenticacion interactiva con noVNC
+
+La imagen instala Xvfb, x11vnc, websockify y el cliente web noVNC. Al iniciar **Authenticate** desde el dashboard, la aplicacion lanza un navegador headed en el servidor y lo expone en una pantalla remota protegida con una contrasena por sesion; el usuario completa login, MFA o CAPTCHA manualmente desde esa pantalla. Si la pantalla remota no esta disponible (por ejemplo, sin las herramientas instaladas), el endpoint de autenticacion devuelve 503 y `/health` reporta `remote_screen: unavailable`.
 
 ## Ejecucion sin Docker
 
-La documentacion de desarrollo debe cubrir el siguiente flujo:
+```bash
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+playwright install chromium
+cp .env.example .env
+# editar .env con rutas locales persistentes
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8765
+```
 
-1. Crear un entorno virtual de Python.
-2. Instalar `requirements.txt`.
-3. Instalar las dependencias del frontend y generar su build.
-4. Instalar Chromium y dependencias de Playwright.
-5. Copiar `.env.example` a `.env` y definir las rutas de datos.
-6. Iniciar la API y el frontend segun la configuracion del proyecto.
-7. Mantener habilitado el scheduler interno o usar un trigger externo.
-
-La base de datos y los perfiles de navegador deben apuntar a ubicaciones persistentes fuera de directorios temporales.
+El scheduler interno se inicia con la aplicacion. Para ejecutar solo una vez o desde un cron, usar `POST /api/runs` (ver seccion Scheduler).
 
 ## Configuracion
 
-Ejemplo minimo:
+Variables soportadas (ver `.env.example`):
 
 ```env
 APP_HOST=0.0.0.0
 APP_PORT=8765
-
-DATABASE_PATH=/app/data/database/epic.db
-SESSIONS_PATH=/app/data/sessions
-
+DATABASE_PATH=./data/database/epic.db
+SESSIONS_PATH=./data/sessions
+STATE_PATH=./data/state
+SCHEDULER_ENABLED=true
+SCHEDULER_INTERVAL_SECONDS=21600
+CLAIM_DELAY_MIN_SECONDS=2
+CLAIM_DELAY_MAX_SECONDS=5
+MAX_RETRY_ATTEMPTS=3
 TELEGRAM_ENABLED=false
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
-
 EXTERNAL_API_KEY_ENABLED=false
 EXTERNAL_API_KEY=
 ```
 
 `.env` contiene configuracion local y secretos, por lo que debe permanecer ignorado por Git. La aplicacion nunca guarda contrasenas Epic como campos normales.
 
-Entre las opciones de comportamiento se incluyen el intervalo del scheduler, su habilitacion, los delays minimo/maximo entre acciones y la configuracion de Telegram. Los nombres definitivos de variables pueden evolucionar junto con el contrato de configuracion.
+Los delays y el intervalo del scheduler tambien pueden ajustarse desde el dashboard (**Settings**); los cambios se guardan en la base y aplican sin reiniciar.
+
+### Nota de seguridad
+
+- El dashboard esta pensado para LAN/Tailscale y no se expone publicamente por defecto.
+- Al habilitar `EXTERNAL_API_KEY_ENABLED=true`, `POST /api/runs` exige el header `X-API-Key`; el boton **Run now** del dashboard usa `/api/runs/manual` y no requiere esa key.
+- Eliminar una cuenta de forma permanente exige confirmacion explicita (el cliente envia `confirm=true`).
+- Los backups y exports nunca incluyen sesiones ni secretos (tokens de Telegram, chat id o API key).
 
 ## Primer uso
 
@@ -149,13 +172,19 @@ Las cuentas se procesan en orden y los juegos uno por uno. Si un juego ya perten
 
 El scheduler interno puede activarse o desactivarse y configurarse por intervalo. No depende de un dia concreto de la semana y no inicia una segunda ejecucion mientras otra siga activa.
 
+Triggers de ejecucion (todos usan el mismo workflow):
+
+- `POST /api/runs` — trigger externo (n8n, cron, scripts). Si `EXTERNAL_API_KEY_ENABLED=true`, exige el header `X-API-Key`.
+- `POST /api/runs/manual` — trigger interno del boton **Run now** del dashboard.
+- Scheduler interno — ejecuta `RunWorkflow.run("scheduler")` en el intervalo configurado.
+
 Para integraciones locales o n8n:
 
 ```text
 Schedule Trigger -> POST /api/runs
 ```
 
-El endpoint usa el mismo workflow del dashboard. Una API key opcional puede proteger triggers expuestos fuera de una red confiable.
+Si una ejecucion ya esta en curso, el trigger devuelve `409` con el motivo.
 
 Comprobacion de salud:
 
@@ -163,7 +192,19 @@ Comprobacion de salud:
 GET /health
 ```
 
-La respuesta comprueba el estado de la aplicacion, SQLite y la disponibilidad de Playwright sin realizar claims ni trafico innecesario contra Epic.
+La respuesta comprueba el estado de la aplicacion, SQLite, Playwright y la disponibilidad de la pantalla remota sin realizar claims ni trafico innecesario contra Epic.
+
+## Telegram (opcional)
+
+Para activar notificaciones, configurar en `.env` (o en **Settings**):
+
+```env
+TELEGRAM_ENABLED=true
+TELEGRAM_BOT_TOKEN=<token-del-bot>
+TELEGRAM_CHAT_ID=<chat-id>
+```
+
+Al habilitarse, el bot envia un resumen por cada ejecucion y alertas de CAPTCHA, MFA, cuenta pausada y fallos significativos, con deduplicacion basica. Si Telegram no esta configurado, dashboard, historial, scheduler y workflow siguen funcionando igual.
 
 ## Intervenciones humanas
 
@@ -173,27 +214,38 @@ Una vez resuelto el problema desde el dashboard, la cuenta vuelve a `active` y p
 
 ## Backup y restore
 
-El backup normal incluye SQLite y la configuracion no secreta necesaria para restaurar el estado. No incluye perfiles de navegador, cookies ni sesiones.
+Backup y export de historial se hacen desde el dashboard o la API:
 
-La importacion valida el archivo y requiere confirmacion explicita antes de restaurar. Tras migrar o reinstalar, las cuentas pueden necesitar autenticarse nuevamente.
+- `GET /api/backup` — descarga el backup (SQLite + configuracion no secreta). Nunca incluye sesiones, cookies ni secretos (tokens de Telegram, chat id o API key).
+- `POST /api/backup/import?overwrite=true` — restaura un backup; sin `overwrite=true` y con datos existentes devuelve `400`.
+- `GET /api/claims/export?format=csv|json` — exporta historial con filtros opcionales por cuenta, estado y fecha.
+
+Tras migrar o reinstalar, las cuentas pueden necesitar autenticarse nuevamente (las sesiones no viajan en el backup).
 
 ## Seguridad y limites
 
 - El dashboard esta pensado para LAN/Tailscale y no se expone publicamente por defecto.
 - No se almacenan contrasenas Epic en la base de datos.
 - No se muestran ni exportan cookies, tokens o sesiones.
+- Los backups excluyen siempre los secretos (tokens de Telegram, chat id, API key).
 - No se automatiza ni evade CAPTCHA, MFA, rate limits o controles anti-bot.
 - Los claims son secuenciales y usan delays conservadores configurables.
 - Los logs excluyen secretos y datos sensibles.
 
 ## Pruebas
 
-La suite debe separar:
+Ejecutar la suite completa:
 
-- **Unitarias:** reglas de elegibilidad, estados, reintentos e idempotencia.
-- **Integracion:** SQLite, API, scheduler, lock y persistencia del workflow.
-- **E2E controladas:** flujo completo con Epic/browser aislados o mockeados.
-- **Live/manuales:** autenticacion real y validaciones contra Epic, ejecutadas bajo demanda.
+```bash
+python -m pytest
+```
+
+La suite se separa en:
+
+- **Unitarias** (`tests/unit/`): elegibilidad, estados, reintentos e idempotencia.
+- **Integracion** (`tests/integration/`): SQLite, API, scheduler, lock y workflow con dobles.
+- **E2E controladas** (`tests/e2e/`): flujo completo con Epic/browser aislados o mockeados.
+- **Live/manuales:** autenticacion real y validaciones contra Epic, ejecutadas bajo demanda (no forman parte de la suite).
 
 Los tests automatizados no deben depender continuamente de la tienda Epic en vivo.
 

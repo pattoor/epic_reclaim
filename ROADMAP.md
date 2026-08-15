@@ -55,18 +55,18 @@ El orden prioriza:
 
 **Objetivo:** guardar cuentas, juegos, claims, ejecuciones, resultados históricos y settings.
 
-- [ ] Implementar modelos y enums de dominio sin duplicar literales de estados.
-- [ ] Crear tablas `accounts`, `games`, `claims`, `claim_attempts`, `runs` y `settings`.
-- [ ] Aplicar foreign keys, índices de historial y unicidad `(account_id, game_id)` en `claims`.
-- [ ] Mantener un `ClaimAttempt` por ejecución para conservar el historial indefinidamente.
-- [ ] Implementar repositories con transacciones para operaciones atómicas.
-- [ ] Implementar CRUD de cuentas, incluyendo `enabled`, nombre, orden y estados.
-- [ ] Preservar historial al desactivar una cuenta.
-- [ ] Definir eliminación permanente con confirmación y política de integridad.
-- [ ] Implementar consultas de claims con filtros por cuenta, fecha y estado.
-- [ ] Persistir settings no secretos del scheduler, retry, delays e integraciones.
-- [ ] Verificar persistencia tras cerrar y volver a iniciar la aplicación.
-- [ ] Crear tests de constraints, CRUD, historial, estados e idempotencia de persistencia.
+- [x] Implementar modelos y enums de dominio sin duplicar literales de estados.
+- [x] Crear tablas `accounts`, `games`, `claims`, `claim_attempts`, `runs` y `settings`.
+- [x] Aplicar foreign keys, índices de historial y unicidad `(account_id, game_id)` en `claims`.
+- [x] Mantener un `ClaimAttempt` por ejecución para conservar el historial indefinidamente.
+- [x] Implementar repositories con transacciones para operaciones atómicas.
+- [x] Implementar CRUD de cuentas, incluyendo `enabled`, nombre, orden y estados.
+- [x] Preservar historial al desactivar una cuenta.
+- [x] Definir eliminación permanente con confirmación y política de integridad.
+- [x] Implementar consultas de claims con filtros por cuenta, fecha y estado.
+- [x] Persistir settings no secretos del scheduler, retry, delays e integraciones.
+- [x] Verificar persistencia tras cerrar y volver a iniciar la aplicación.
+- [x] Crear tests de constraints, CRUD, historial, estados e idempotencia de persistencia.
 
 **Criterio de salida:** el estado del sistema se recupera desde SQLite y una segunda escritura lógica para la misma cuenta y juego no crea un claim duplicado.
 

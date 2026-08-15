@@ -59,7 +59,7 @@ def test_auth_success_activates_account(tmp_path):
     )
     session = auth.start(account.id)
     assert session.status == "running"
-    assert session.screen_url == "/auth-screen"
+    assert session.screen_url.startswith("/auth-screen?token=")
 
     _wait(lambda: session.status != "running")
     assert session.status == "completed"
@@ -130,6 +130,29 @@ def test_auth_unavailable_when_no_remote_screen(tmp_path):
     session = auth.start(account.id)
     assert session.status == "unavailable"
     assert session.token == ""
+
+
+def test_auth_rejects_second_concurrent_flow_for_account(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    browser = FakeAuthBrowser(AuthOutcome(success=True))
+    screen = FakeScreen(available=True)
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=browser,
+        screen=screen,
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    first = auth.start(account.id)
+    assert first.status == "running"
+
+    second = auth.start(account.id)
+    assert second.status == "failed"
+    assert "already running" in (second.error or "")
 
 
 def _wait(predicate, timeout_seconds: float = 5):

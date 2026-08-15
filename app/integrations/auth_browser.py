@@ -54,12 +54,11 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
                 body = page.inner_text("body")
                 if "captcha" in body.lower() or "verify you are human" in body.lower():
                     return AuthOutcome(success=False, needs_intervention=True, error="captcha")
-                if "Sign Out" in body or "Account" in body:
-                    identity = _extract_identity(page.url)
+                if _is_logged_in(page):
                     return AuthOutcome(
                         success=True,
-                        epic_identity=identity,
-                        display_name="Epic User",
+                        epic_identity=_extract_identity(page),
+                        display_name=None,
                     )
             return AuthOutcome(success=False, error="auth timeout")
         finally:
@@ -70,7 +69,17 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
             playwright.stop()
 
 
-def _extract_identity(url: str) -> str | None:
-    if "epicgames" not in url:
+def _is_logged_in(page) -> bool:
+    try:
+        return page.get_by_role("button", name="Sign Out").is_visible(timeout=2000)
+    except Exception:
+        return False
+
+
+def _extract_identity(page) -> str | None:
+    try:
+        button = page.get_by_role("button", name="Sign Out")
+        button.hover(timeout=2000)
+        return page.url.split("/")[-1] or None
+    except Exception:
         return None
-    return "epic-account"

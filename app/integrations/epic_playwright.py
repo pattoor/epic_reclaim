@@ -39,11 +39,15 @@ def classify_offer(title: str, status_badge: str | None) -> GameCandidate | None
 
 
 class PlaywrightSession(AccountSession):
-    def __init__(self, context):
+    def __init__(self, context, playwright):
         self.context = context
+        self._playwright = playwright
 
     def close(self) -> None:
-        self.context.close()
+        try:
+            self.context.close()
+        finally:
+            self._playwright.stop()
 
 
 class PlaywrightEpicAdapter(EpicAdapter):
@@ -113,7 +117,7 @@ class PlaywrightEpicAdapter(EpicAdapter):
             user_data_dir=str(self._profile_path(account_id)),
             headless=True,
         )
-        return PlaywrightSession(context)
+        return PlaywrightSession(context, playwright)
 
     def _active_page(self, session: AccountSession):
         if session.context.pages:
@@ -125,8 +129,11 @@ class PlaywrightEpicAdapter(EpicAdapter):
         page.goto(game.url, timeout=30000, wait_until="domcontentloaded")
         page.wait_for_timeout(2000)
         text = page.inner_text("body").lower()
-        if _is_security_condition(text):
-            raise InterventionRequiredError("security condition during ownership check")
+        condition = _is_security_condition(text)
+        if condition == Outcome.INTERVENTION:
+            raise InterventionRequiredError("captcha detected during ownership check")
+        if condition == Outcome.RATE_LIMITED:
+            raise RateLimitError("rate limited during ownership check")
         return "in library" in text
 
     def claim(self, session: AccountSession, game: GameCandidate) -> ClaimResult:

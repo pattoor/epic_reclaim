@@ -42,6 +42,18 @@ class AuthService:
         with self._database.connect() as connection:
             self._repository.get(connection, account_id)
 
+        if any(
+            session.account_id == account_id and session.status == "running"
+            for session in self._sessions.values()
+        ):
+            return AuthSession(
+                token="",
+                account_id=account_id,
+                screen_url=None,
+                status="failed",
+                error="an authentication flow is already running for this account",
+            )
+
         if not self._screen.available():
             return AuthSession(
                 token="",
@@ -52,10 +64,11 @@ class AuthService:
             )
 
         display = self._screen.start()
+        token = secrets.token_urlsafe(24)
         session = AuthSession(
-            token=secrets.token_urlsafe(24),
+            token=token,
             account_id=account_id,
-            screen_url=self._screen.screen_url(),
+            screen_url=self._screen.screen_url(token),
             status="running",
         )
         self._sessions[session.token] = session

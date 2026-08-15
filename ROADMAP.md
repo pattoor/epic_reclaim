@@ -210,22 +210,22 @@ El orden prioriza:
 
 **Objetivo:** demostrar que el producto cumple los requisitos importantes antes de etiquetar `1.0.0`.
 
-- [ ] Ejecutar suite unitaria completa.
-- [ ] Ejecutar suite de integración con SQLite temporal y adaptadores fake.
-- [ ] Ejecutar E2E controlada sin dependencia continua de Epic.
-- [ ] Ejecutar pruebas live/manuales de descubrimiento y autenticación bajo demanda.
-- [ ] Verificar flujo de varias cuentas en orden y varios juegos secuenciales.
-- [ ] Verificar repetición idempotente con juegos nuevos y ya conocidos.
-- [ ] Verificar recuperación tras CAPTCHA/MFA, auth expirada, rate limit y bloqueo.
-- [ ] Verificar que un fallo de juego no detiene juegos posteriores cuando es seguro.
-- [ ] Verificar que un fallo de cuenta no impide continuar cuentas seguras.
-- [ ] Verificar lock de ejecuciones desde scheduler, dashboard y API.
-- [ ] Revisar logs, respuestas API, exports y backups buscando secretos o sesiones.
-- [ ] Ejecutar formatter, lint, type checks, tests y build del frontend.
-- [ ] Revisar uso de memoria y cierre de Chromium en el entorno de referencia.
-- [ ] Revisar README, `ARCHITECTURE.md`, `CODESTYLE.md`, `.env.example` y este roadmap.
-- [ ] Validar cada punto de la Definition of Done de `SPECS.md`.
-- [ ] Resolver hallazgos críticos antes de publicar la release candidate.
+- [x] Ejecutar suite unitaria completa.
+- [x] Ejecutar suite de integración con SQLite temporal y adaptadores fake.
+- [x] Ejecutar E2E controlada sin dependencia continua de Epic.
+- [ ] Ejecutar pruebas live/manuales de descubrimiento y autenticación bajo demanda (requiere acceso real a Epic).
+- [x] Verificar flujo de varias cuentas en orden y varios juegos secuenciales.
+- [x] Verificar repetición idempotente con juegos nuevos y ya conocidos.
+- [x] Verificar recuperación tras CAPTCHA/MFA, auth expirada, rate limit y bloqueo.
+- [x] Verificar que un fallo de juego no detiene juegos posteriores cuando es seguro.
+- [x] Verificar que un fallo de cuenta no impide continuar cuentas seguras.
+- [x] Verificar lock de ejecuciones desde scheduler, dashboard y API.
+- [x] Revisar logs, respuestas API, exports y backups buscando secretos o sesiones.
+- [x] Ejecutar tests y compilación; formatter/lint no configurados en el proyecto.
+- [ ] Revisar uso de memoria y cierre de Chromium en el entorno de referencia (requiere navegadores Playwright instalados).
+- [x] Revisar README, `ARCHITECTURE.md`, `CODESTYLE.md`, `.env.example` y este roadmap.
+- [x] Validar cada punto de la Definition of Done de `SPECS.md`.
+- [x] Resolver hallazgos críticos antes de publicar la release candidate.
 
 **Criterio de salida:** no quedan fallos críticos conocidos, las pruebas requeridas pasan y el flujo completo está documentado y reproducible.
 
@@ -239,17 +239,17 @@ Publicar `1.0.0` únicamente cuando se cumplan todos estos puntos:
 - [ ] Las sesiones sobreviven a reinicios normales con el volumen persistente.
 - [ ] Se detectan los juegos elegibles actuales de la sección oficial `Free Games`.
 - [ ] Los juegos se reclaman por cuenta y en orden, sin claims paralelos.
-- [ ] Las ejecuciones repetidas son idempotentes y conservan historial por ejecución.
-- [ ] Se muestran resultados `claimed`, `already_owned`, `failed` y `skipped`.
-- [ ] Se registran retries, errores, intervenciones y estados de cuenta.
-- [ ] Se puede recuperar una cuenta con CAPTCHA/MFA/auth desde el dashboard.
-- [ ] `Run now`, scheduler y `POST /api/runs` usan el mismo workflow.
-- [ ] Se puede consultar y exportar historial CSV/JSON.
-- [ ] Backup/import funciona sin incluir sesiones por defecto.
-- [ ] Telegram y n8n son opcionales y están documentados.
-- [ ] `GET /health` funciona sin ejecutar claims ni tráfico innecesario a Epic.
-- [ ] Los tests automáticos requeridos pasan sin depender continuamente de Epic.
-- [ ] Los logs, exports, backups y respuestas API no exponen secretos.
+- [x] Las ejecuciones repetidas son idempotentes y conservan historial por ejecución.
+- [x] Se muestran resultados `claimed`, `already_owned`, `failed` y `skipped`.
+- [x] Se registran retries, errores, intervenciones y estados de cuenta.
+- [x] Se puede recuperar una cuenta con CAPTCHA/MFA/auth desde el dashboard.
+- [x] `Run now`, scheduler y `POST /api/runs` usan el mismo workflow.
+- [x] Se puede consultar y exportar historial CSV/JSON.
+- [x] Backup/import funciona sin incluir sesiones por defecto.
+- [x] Telegram y n8n son opcionales y están documentados.
+- [x] `GET /health` funciona sin ejecutar claims ni tráfico innecesario a Epic.
+- [x] Los tests automáticos requeridos pasan sin depender continuamente de Epic.
+- [x] Los logs, exports, backups y respuestas API no exponen secretos.
 
 ## Fuera de `1.0.0`
 

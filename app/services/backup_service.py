@@ -39,10 +39,11 @@ def _validate(payload: dict) -> None:
             f"unsupported backup schema version {payload.get('schema_version')}"
         )
     tables = payload.get("tables")
-    if not isinstance(tables, dict) or not all(
-        isinstance(rows, list) for rows in tables.values()
-    ):
+    if not isinstance(tables, dict):
         raise BackupError("backup is missing a valid tables payload")
+    for table in TABLES:
+        if not isinstance(tables.get(table), list):
+            raise BackupError(f"backup is missing the {table} table")
 
 
 def import_backup(connection, payload: dict, *, overwrite: bool = False) -> int:

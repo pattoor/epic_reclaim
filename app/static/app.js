@@ -102,7 +102,7 @@ async function schedulerInfo() {
 $("run-now").addEventListener("click", async () => {
   $("run-feedback").textContent = "starting run...";
   try {
-    const result = await api("/api/runs", { method: "POST" });
+    const result = await api("/api/runs/manual", { method: "POST" });
     $("run-feedback").textContent = `run #${result.run_id} started`;
     watchRun(result.run_id);
   } catch (error) {

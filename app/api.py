@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.domain.errors import NotFoundError
-from app.domain.models import AccountState, RunTrigger
+from app.domain.models import RunTrigger
 from app.services.backup_service import BackupError, export_backup, import_backup
 
 router = APIRouter(prefix="/api")
@@ -181,6 +181,29 @@ def revoke_auth(token: str, request: Request):
     return {"status": "revoked"}
 
 
+@router.get("/auth-screen")
+def auth_screen(request: Request, token: str, port: int = 6080):
+    from fastapi.responses import HTMLResponse
+
+    session = _auth_service(request).get(token)
+    if session is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    html = f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Epic Reclaim auth</title></head>
+<body style="margin:0;font-family:system-ui,sans-serif;background:#1a1a1a;color:#eee">
+<script>window.epicReclaimNoVncPort = {port};</script>
+<iframe id="vnc" width="100%" height="100%" style="border:0;min-height:100vh" title="remote browser"></iframe>
+<script>
+(function() {{
+  var host = window.location.hostname;
+  var el = document.getElementById('vnc');
+  el.src = 'http://' + host + ':{port}/vnc.html?autoconnect=true&resize=scale';
+}})();
+</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
 # Games
 
 
@@ -352,6 +375,14 @@ def trigger_run(request: Request):
     return {"run_id": outcome.run_id, "status": outcome.status}
 
 
+@router.post("/runs/manual")
+def trigger_run_manual(request: Request):
+    outcome = _workflow(request).start(RunTrigger.MANUAL)
+    if outcome.status == "conflict":
+        raise HTTPException(status_code=409, detail=outcome.error)
+    return {"run_id": outcome.run_id, "status": outcome.status}
+
+
 # Backup / restore
 
 
@@ -423,5 +454,12 @@ def update_settings(body: SettingsUpdate, request: Request):
     }
     updates = {key: value for key, value in updates.items() if value is not None}
     with _db(request).connect() as connection:
-        stored = _settings_service(request).update(connection, updates, _EDITABLE_KEYS)
-    return {key: stored.get(key) for key in _EDITABLE_KEYS}
+        _settings_service(request).update(connection, updates, _EDITABLE_KEYS)
+        effective = _settings_service(request).load(connection)
+    return {
+        "scheduler_enabled": effective.scheduler_enabled,
+        "scheduler_interval_seconds": effective.scheduler_interval_seconds,
+        "claim_delay_min_seconds": effective.claim_delay_min_seconds,
+        "claim_delay_max_seconds": effective.claim_delay_max_seconds,
+        "telegram_enabled": effective.telegram_enabled,
+    }

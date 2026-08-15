@@ -10,7 +10,13 @@ from app.repositories import (
     RunsRepository,
 )
 from app.services.run_workflow import RunLock, RunWorkflow
-from tests.fakes import FakeEpicAdapter, intervention_error
+from tests.fakes import (
+    FakeEpicAdapter,
+    intervention_error,
+    auth_error,
+    rate_limit_error,
+    blocked_error,
+)
 
 
 class FakeSettings:
@@ -205,3 +211,82 @@ def test_workflow_lock_prevents_concurrent_runs(tmp_path):
 
     assert outcome.status == "conflict"
     lock.release()
+
+
+def test_workflow_auth_required_sets_needs_authentication(tmp_path):
+    database = _database(tmp_path)
+    account_id = _active_account(database)
+    adapter = FakeEpicAdapter(
+        games=_games(), claim_outcomes={f"{account_id}:g1": auth_error()}
+    )
+    workflow = _build(database, adapter)
+
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    assert outcome.failed_count == 1
+    with database.connect() as connection:
+        stored = AccountsRepository().get(connection, account_id)
+    assert stored.state == AccountState.NEEDS_AUTHENTICATION
+
+
+def test_workflow_rate_limit_pauses_account(tmp_path):
+    database = _database(tmp_path)
+    account_id = _active_account(database)
+    adapter = FakeEpicAdapter(
+        games=_games(), claim_outcomes={f"{account_id}:g1": rate_limit_error()}
+    )
+    workflow = _build(database, adapter)
+
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    assert outcome.failed_count == 1
+    with database.connect() as connection:
+        stored = AccountsRepository().get(connection, account_id)
+    assert stored.state == AccountState.PAUSED
+
+
+def test_workflow_blocked_account_pauses(tmp_path):
+    database = _database(tmp_path)
+    account_id = _active_account(database)
+    adapter = FakeEpicAdapter(
+        games=_games(), claim_outcomes={f"{account_id}:g1": blocked_error()}
+    )
+    workflow = _build(database, adapter)
+
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    with database.connect() as connection:
+        stored = AccountsRepository().get(connection, account_id)
+    assert stored.state == AccountState.PAUSED
+
+
+def test_workflow_one_game_failure_does_not_stop_next_game(tmp_path):
+    database = _database(tmp_path)
+    account_id = _active_account(database)
+    adapter = FakeEpicAdapter(
+        games=_games(),
+        claim_outcomes={
+            f"{account_id}:g1": "transient",
+        },
+    )
+    workflow = _build(database, adapter)
+
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    assert outcome.failed_count == 1
+    assert outcome.claimed_count == 1
+
+
+def test_workflow_discovery_security_pauses_accounts(tmp_path):
+    database = _database(tmp_path)
+    _active_account(database)
+    adapter = FakeEpicAdapter(games=_games())
+    adapter.fail_discovery = intervention_error()
+    workflow = _build(database, adapter)
+
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    assert outcome.status == RunState.FAILED
+    with database.connect() as connection:
+        stored = AccountsRepository().list(connection)
+    assert stored[0].state == AccountState.NEEDS_INTERVENTION

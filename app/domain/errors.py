@@ -9,10 +9,6 @@ class NotFoundError(DomainError):
     pass
 
 
-class ConflictError(DomainError):
-    pass
-
-
 class EpicError(DomainError):
     pass
 

@@ -15,24 +15,10 @@ class RemoteScreen(ABC):
         pass
 
     @abstractmethod
-    def screen_url(self) -> str | None:
+    def screen_url(self, token: str | None = None) -> str | None:
         pass
 
     @abstractmethod
-    def stop(self) -> None:
-        pass
-
-
-class UnavailableRemoteScreen(RemoteScreen):
-    def available(self) -> bool:
-        return False
-
-    def start(self) -> str | None:
-        return None
-
-    def screen_url(self) -> str | None:
-        return None
-
     def stop(self) -> None:
         pass
 
@@ -82,10 +68,11 @@ class NoVNCProvider(RemoteScreen):
         self._processes = [xvfb, x11vnc, websockify]
         return self._display
 
-    def screen_url(self) -> str | None:
+    def screen_url(self, token: str | None = None) -> str | None:
         if not self._processes:
             return None
-        return f"/auth-screen?token=one-time-token&port={self._ws_port}"
+        token = token or ""
+        return f"/auth-screen?token={token}&port={self._ws_port}"
 
     def stop(self) -> None:
         for process in self._processes:

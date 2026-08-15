@@ -25,10 +25,31 @@ from app.repositories import (
     RunEventsRepository,
     RunsRepository,
 )
+from app.services.discovery_service import DiscoveryService
 
 logger = logging.getLogger(__name__)
 
 Sleeper = Callable[[float], None]
+
+
+def _state_for(exc: Exception) -> str:
+    if isinstance(exc, InterventionRequiredError):
+        return AccountState.NEEDS_INTERVENTION
+    if isinstance(exc, AuthenticationRequiredError):
+        return AccountState.NEEDS_AUTHENTICATION
+    return AccountState.PAUSED
+
+
+def _outcome_error(outcome: str) -> Exception | None:
+    if outcome == Outcome.INTERVENTION:
+        return InterventionRequiredError("intervention required")
+    if outcome == Outcome.AUTH_REQUIRED:
+        return AuthenticationRequiredError("authentication required")
+    if outcome == Outcome.RATE_LIMITED:
+        return RateLimitError("rate limited")
+    if outcome == Outcome.BLOCKED:
+        return AccountBlockedError("account blocked")
+    return None
 
 
 @dataclass(frozen=True)
@@ -46,16 +67,13 @@ class RunOutcome:
 
 class RunLock:
     def __init__(self):
-        self._locked = False
+        self._lock = threading.Lock()
 
     def acquire(self) -> bool:
-        if self._locked:
-            return False
-        self._locked = True
-        return True
+        return self._lock.acquire(blocking=False)
 
     def release(self) -> None:
-        self._locked = False
+        self._lock.release()
 
 
 class RunWorkflow:
@@ -77,8 +95,8 @@ class RunWorkflow:
     ):
         self._database = database
         self._adapter = adapter
+        self._discovery = DiscoveryService(adapter, games_repository)
         self._accounts = accounts_repository
-        self._games = games_repository
         self._claims = claims_repository
         self._attempts = attempts_repository
         self._runs = runs_repository
@@ -149,19 +167,15 @@ class RunWorkflow:
 
         try:
             with self._database.connect() as connection:
-                candidates = self._retry_transient(
-                    self._adapter.discover_free_games, max_attempts
-                )
-                games = []
-                for candidate in candidates:
-                    games.append(
-                        self._games.upsert(
-                            connection,
-                            epic_id=candidate.epic_id,
-                            name=candidate.name,
-                            url=candidate.url,
-                        )
+                try:
+                    games = self._retry_transient(
+                        lambda: self._discovery.discover(connection), max_attempts
                     )
+                except (InterventionRequiredError, RateLimitError, AccountBlockedError, AuthenticationRequiredError) as exc:
+                    self._pause_active_accounts(
+                        connection, run_id, _state_for(exc), str(exc), counters
+                    )
+                    raise
                 games_detected = len(games)
                 self._events.add(
                     connection,
@@ -231,7 +245,7 @@ class RunWorkflow:
             final_status = RunState.PARTIAL
 
         with self._database.connect() as connection:
-            run = self._runs.finish(
+            self._runs.finish(
                 connection,
                 run_id,
                 status=final_status,
@@ -264,6 +278,13 @@ class RunWorkflow:
         if self._notifier is not None:
             self._notifier.notify_run_summary(outcome)
         return outcome
+
+    def _pause_active_accounts(
+        self, connection, run_id, state, reason, counters
+    ) -> None:
+        accounts = self._accounts.list_active(connection)
+        for account in accounts:
+            self._pause_account(connection, run_id, account.id, state, reason, counters)
 
     def _process_game(
         self,
@@ -339,6 +360,11 @@ class RunWorkflow:
                 counters,
                 attempts=attempts,
             )
+        blocking = _outcome_error(result.outcome)
+        if blocking is not None:
+            return self._handle_blocking(
+                connection, run_id, account_id, game, claim, blocking, counters
+            )
         return self._record_claim(
             connection,
             run_id,
@@ -376,13 +402,14 @@ class RunWorkflow:
         return min(2 ** (attempt - 1), 30)
 
     def _handle_blocking(self, connection, run_id, account_id, game, claim, exc, counters) -> str:
-        if isinstance(exc, InterventionRequiredError):
-            state = AccountState.NEEDS_INTERVENTION
-        elif isinstance(exc, AuthenticationRequiredError):
-            state = AccountState.NEEDS_AUTHENTICATION
-        else:
-            state = AccountState.PAUSED
-        self._pause_account(connection, run_id, account_id, state, str(exc), counters)
+        self._pause_account(
+            connection,
+            run_id,
+            account_id,
+            _state_for(exc),
+            str(exc),
+            counters,
+        )
         self._record_claim(
             connection,
             run_id,

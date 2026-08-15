@@ -12,7 +12,10 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-    && playwright install chromium --with-deps
+    && playwright install chromium --with-deps \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        xvfb x11vnc websockify \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY app ./app
 

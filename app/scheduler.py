@@ -10,6 +10,9 @@ from app.services.settings_service import SettingsService
 
 logger = logging.getLogger(__name__)
 
+# Lower bound to avoid hammering Epic when the scheduler is enabled.
+MIN_INTERVAL_SECONDS = 60
+
 
 class Scheduler:
     def __init__(
@@ -46,9 +49,9 @@ class Scheduler:
             await self._tick_if_enabled()
             settings = self._load_settings()
             if settings.scheduler_enabled:
-                interval = max(settings.scheduler_interval_seconds, 60)
+                interval = max(settings.scheduler_interval_seconds, MIN_INTERVAL_SECONDS)
             else:
-                interval = 60
+                interval = MIN_INTERVAL_SECONDS
             self.next_run_at = (
                 datetime.now(timezone.utc) + timedelta(seconds=interval)
             ).isoformat(timespec="seconds")

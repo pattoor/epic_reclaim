@@ -104,7 +104,7 @@ def test_settings_get_and_patch(tmp_path):
 
         patched = client.patch("/api/settings", json={"scheduler_interval_seconds": 7200})
         assert patched.status_code == 200
-        assert patched.json()["scheduler_interval_seconds"] == "7200"
+        assert patched.json()["scheduler_interval_seconds"] == 7200
 
         settings = client.get("/api/settings")
         assert settings.json()["scheduler_interval_seconds"] == 7200

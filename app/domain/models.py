@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 class AccountState:
@@ -23,7 +23,6 @@ class RunState:
     COMPLETED = "completed"
     PARTIAL = "partial"
     FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 class RunTrigger:
@@ -41,7 +40,6 @@ class RunEventType:
     GAME_FAILED = "game_failed"
     GAME_SKIPPED = "game_skipped"
     ACCOUNT_PAUSED = "account_paused"
-    INTERVENTION_REQUIRED = "intervention_required"
     RUN_FINISHED = "run_finished"
 
 
@@ -130,10 +128,3 @@ class RunEvent:
 class SettingsEntry:
     key: str
     value: str
-
-
-@dataclass
-class RunProgress:
-    current_account: str | None = None
-    current_game: str | None = None
-    events: list[RunEvent] = field(default_factory=list)

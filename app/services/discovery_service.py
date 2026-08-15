@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.integrations.epic_adapter import EpicAdapter, GameCandidate
+from app.integrations.epic_adapter import EpicAdapter
 from app.repositories import GamesRepository
 
 
@@ -9,13 +9,16 @@ class DiscoveryService:
         self._adapter = adapter
         self._repository = repository
 
-    def discover(self, connection) -> list[GameCandidate]:
+    def discover(self, connection) -> list:
         candidates = self._adapter.discover_free_games()
+        games = []
         for candidate in candidates:
-            self._repository.upsert(
-                connection,
-                epic_id=candidate.epic_id,
-                name=candidate.name,
-                url=candidate.url,
+            games.append(
+                self._repository.upsert(
+                    connection,
+                    epic_id=candidate.epic_id,
+                    name=candidate.name,
+                    url=candidate.url,
+                )
             )
-        return candidates
+        return games

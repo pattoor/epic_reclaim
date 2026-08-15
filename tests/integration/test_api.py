@@ -51,7 +51,22 @@ def test_accounts_crud(tmp_path):
         assert patched.json()["display_name"] == "Renamed"
         assert patched.json()["processing_order"] == 2
 
-        deleted = client.delete(f"/api/accounts/{account_id}")
+        deleted = client.delete(f"/api/accounts/{account_id}?confirm=true")
+        assert deleted.status_code == 200
+        assert client.get("/api/accounts").json() == []
+
+
+def test_delete_account_requires_confirmation(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        account_id = client.post("/api/accounts", json={"display_name": "A"}).json()["id"]
+
+        rejected = client.delete(f"/api/accounts/{account_id}")
+        assert rejected.status_code == 400
+
+        assert client.get("/api/accounts").json() != []
+
+        deleted = client.delete(f"/api/accounts/{account_id}?confirm=true")
         assert deleted.status_code == 200
         assert client.get("/api/accounts").json() == []
 
@@ -108,6 +123,33 @@ def test_settings_get_and_patch(tmp_path):
 
         settings = client.get("/api/settings")
         assert settings.json()["scheduler_interval_seconds"] == 7200
+
+
+def test_settings_reject_invalid_intervals_and_delays(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        assert client.patch("/api/settings", json={"scheduler_interval_seconds": 0}).status_code == 422
+        assert client.patch("/api/settings", json={"claim_delay_min_seconds": -1}).status_code == 422
+        assert (
+            client.patch(
+                "/api/settings",
+                json={"claim_delay_min_seconds": 8, "claim_delay_max_seconds": 3},
+            ).status_code
+            == 422
+        )
+
+
+def test_settings_reject_max_below_current_min(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        client.patch(
+            "/api/settings",
+            json={"claim_delay_min_seconds": 6, "claim_delay_max_seconds": 9},
+        )
+        assert (
+            client.patch("/api/settings", json={"claim_delay_max_seconds": 4}).status_code
+            == 422
+        )
 
 
 def test_external_api_key_protects_run_trigger(tmp_path):

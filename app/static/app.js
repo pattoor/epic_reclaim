@@ -192,7 +192,7 @@ document.querySelector("#accounts-table").addEventListener("click", async (event
       loadAccounts();
     } else if (act === "delete") {
       if (confirm(`Permanently delete account #${id}? This cannot be undone.`)) {
-        await api(`/api/accounts/${id}`, { method: "DELETE" });
+        await api(`/api/accounts/${id}?confirm=true`, { method: "DELETE" });
         loadAccounts();
       }
     }

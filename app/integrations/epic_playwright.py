@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from app.domain.errors import (
@@ -19,6 +20,9 @@ from app.integrations.epic_adapter import (
 FREE_GAMES_URL = "https://store.epicgames.com/en-US/free-games"
 
 _NON_ELIGIBLE = ("coming soon", "unavailable", "demo", "free to play")
+_PAID_CTA = ("buy", "add to cart", "purchase", "pre-order", "preorder", "checkout")
+_FREE_SIGNAL = ("free", "get", "add to library")
+_PRICE_RE = re.compile(r"(?:\$|€|£)\s*\d")
 _SECURITY_MARKERS = ("captcha", "verify you are human", "rate limit")
 
 
@@ -31,9 +35,38 @@ def _is_security_condition(page_text: str) -> str | None:
     return None
 
 
-def classify_offer(title: str, status_badge: str | None) -> GameCandidate | None:
-    lowered = f"{title} {status_badge or ''}".lower()
-    if any(marker in lowered for marker in _NON_ELIGIBLE):
+def _has_nonzero_price(price: str | None) -> bool:
+    if not price:
+        return False
+    return bool(_PRICE_RE.search(price.lower()))
+
+
+def _is_paid_cta(cta: str | None) -> bool:
+    if not cta:
+        return False
+    lowered = cta.lower()
+    return any(marker in lowered for marker in _PAID_CTA)
+
+
+def _has_free_signal(price: str | None, cta: str | None, badge: str | None) -> bool:
+    signals = " ".join(item for item in (price, cta, badge) if item).lower()
+    return any(marker in signals for marker in _FREE_SIGNAL)
+
+
+def classify_offer(
+    title: str,
+    status_badge: str | None,
+    price: str | None = None,
+    cta: str | None = None,
+) -> GameCandidate | None:
+    combined = " ".join(item for item in (title, status_badge, price, cta) if item).lower()
+    if any(marker in combined for marker in _NON_ELIGIBLE):
+        return None
+    if _is_paid_cta(cta) or _is_paid_cta(status_badge):
+        return None
+    if _has_nonzero_price(price):
+        return None
+    if not _has_free_signal(price, cta, status_badge):
         return None
     return GameCandidate(epic_id=None, name=title, url="")
 
@@ -90,9 +123,17 @@ class PlaywrightEpicAdapter(EpicAdapter):
                     if title_el is None:
                         continue
                     title = title_el.inner_text().strip()
+                    price_el = offer.query_selector(
+                        "[data-testid='OfferPrice'], [data-testid='Price']"
+                    )
+                    price = price_el.inner_text().strip() if price_el else None
                     badge_el = offer.query_selector("[data-testid='OfferStatus']")
                     badge = badge_el.inner_text().strip() if badge_el else None
-                    candidate = classify_offer(title, badge)
+                    cta_el = offer.query_selector(
+                        "[data-testid='CTAButton'], button"
+                    )
+                    cta = cta_el.inner_text().strip() if cta_el else None
+                    candidate = classify_offer(title, badge, price=price, cta=cta)
                     if candidate is None:
                         continue
                     href = offer.get_attribute("href") or ""

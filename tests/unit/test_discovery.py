@@ -13,15 +13,30 @@ def _database(tmp_path) -> Database:
 
 
 def test_classify_offer_accepts_eligible():
-    candidate = classify_offer("Subnautica", None)
+    candidate = classify_offer("Subnautica", None, price="Free", cta="Get")
     assert candidate is not None
     assert candidate.name == "Subnautica"
 
 
+def test_classify_offer_requires_free_signal():
+    assert classify_offer("Some Game", None, price=None, cta=None) is None
+    assert classify_offer("Some Game", None, price="19,99 EUR", cta="Buy Now") is None
+
+
 def test_classify_offer_excludes_coming_soon_and_demos():
-    assert classify_offer("Upcoming Title", "Coming Soon") is None
-    assert classify_offer("Demo Game", None) is None
-    assert classify_offer("Fortnite", "Free to Play") is None
+    assert classify_offer("Upcoming Title", "Coming Soon", price="Free", cta="Get") is None
+    assert classify_offer("Demo Game", None, price="Free", cta="Get") is None
+    assert classify_offer("Fortnite", "Free to Play", price="Free", cta="Get") is None
+
+
+def test_classify_offer_rejects_paid_price():
+    assert classify_offer("AAA Game", None, price="$59.99", cta="Buy Now") is None
+    assert classify_offer("Discounted", "Sale", price="€29.99", cta="Add to Cart") is None
+
+
+def test_classify_offer_rejects_paid_cta_even_with_free_price():
+    assert classify_offer("Tricky", None, price="Free", cta="Buy Now") is None
+    assert classify_offer("Tricky", None, price="Free", cta="Add to Cart") is None
 
 
 def test_discovery_persists_games(tmp_path):

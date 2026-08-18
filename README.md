@@ -147,7 +147,7 @@ EXTERNAL_API_KEY=
 
 `.env` contiene configuracion local y secretos, por lo que debe permanecer ignorado por Git. La aplicacion nunca guarda contrasenas Epic como campos normales.
 
-Los delays y el intervalo del scheduler tambien pueden ajustarse desde el dashboard (**Settings**); los cambios se guardan en la base y aplican sin reiniciar.
+Los delays y el intervalo del scheduler tambien pueden ajustarse desde el dashboard (**Settings**). El intervalo se configura como dias, horas, minutos y segundos; los cambios se guardan en la base y aplican sin reiniciar.
 
 ### Nota de seguridad
 
@@ -171,21 +171,23 @@ Las cuentas se procesan en orden y los juegos uno por uno. Si un juego ya perten
 
 ## Scheduler y API externa
 
-El scheduler interno puede activarse o desactivarse y configurarse por intervalo. No depende de un dia concreto de la semana y no inicia una segunda ejecucion mientras otra siga activa.
+El scheduler es **interno**: un bucle `asyncio` dentro del mismo proceso FastAPI que ejecuta `RunWorkflow.run("scheduler")` en el intervalo configurado. No requiere n8n, cron ni ningun otro sistema externo para funcionar.
+
+Desde **Settings** puedes activar o desactivar el scheduler y establecer el intervalo en dias, horas, minutos y segundos. El valor por defecto es 6 horas. El scheduler nunca inicia una segunda ejecucion mientras otra siga activa.
 
 Triggers de ejecucion (todos usan el mismo workflow):
 
-- `POST /api/runs` — trigger externo (n8n, cron, scripts). Si `EXTERNAL_API_KEY_ENABLED=true`, exige el header `X-API-Key`.
-- `POST /api/runs/manual` — trigger interno del boton **Run now** del dashboard.
-- Scheduler interno — ejecuta `RunWorkflow.run("scheduler")` en el intervalo configurado.
+- **Scheduler interno** — ejecuta automaticamente `RunWorkflow.run("scheduler")` segun el intervalo configurado.
+- **`Run now`** en el dashboard — llama a `POST /api/runs/manual` y no requiere API key.
+- **`POST /api/runs`** — trigger externo para n8n, cron, scripts u otro orquestador. Si `EXTERNAL_API_KEY_ENABLED=true`, exige el header `X-API-Key`.
 
-Para integraciones locales o n8n:
+Ejemplo de integracion externa con n8n o cron:
 
 ```text
 Schedule Trigger -> POST /api/runs
 ```
 
-Si una ejecucion ya esta en curso, el trigger devuelve `409` con el motivo.
+Si una ejecucion ya esta en curso, cualquier trigger devuelve `409` indicando que hay una ejecucion activa. n8n y Telegram son opcionales: el sistema funciona igual sin ellos.
 
 Comprobacion de salud:
 

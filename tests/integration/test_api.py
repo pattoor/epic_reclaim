@@ -139,6 +139,14 @@ def test_settings_get_and_patch(tmp_path):
         assert settings.json()["scheduler_interval_seconds"] == 7200
 
 
+def test_settings_interval_is_preserved_as_seconds(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        response = client.patch("/api/settings", json={"scheduler_interval_seconds": 3661})
+        assert response.status_code == 200
+        assert response.json()["scheduler_interval_seconds"] == 3661
+
+
 def test_settings_reject_invalid_intervals_and_delays(tmp_path):
     app = _make_app(tmp_path)
     with TestClient(app) as client:

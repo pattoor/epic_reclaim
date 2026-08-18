@@ -40,6 +40,19 @@ document.querySelectorAll("nav button").forEach((b) =>
   b.addEventListener("click", () => switchView(b.dataset.view))
 );
 
+function formatDuration(seconds) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (secs || parts.length === 0) parts.push(`${secs}s`);
+  return parts.join(" ");
+}
+
 async function loadDashboard() {
   try {
     const [health, runs, accounts, claims, settings] = await Promise.all([
@@ -49,36 +62,58 @@ async function loadDashboard() {
       api("/api/claims?limit=8"),
       api("/api/settings"),
     ]);
-    $("health-status").textContent =
-      `status: ${health.status} | database: ${health.database} | playwright: ${health.playwright} | remote screen: ${health.remote_screen}`;
+
+    setCardState("card-health", health.status === "ok" ? "ok" : "error");
+    $("health-status").textContent = health.status === "ok" ? "Healthy" : "Problem";
+    $("health-detail").textContent =
+      `DB: ${health.database} | Playwright: ${health.playwright} | Remote screen: ${health.remote_screen}`;
+
+    setCardState(
+      "card-scheduler",
+      settings.scheduler_enabled ? "ok" : "neutral"
+    );
+    $("scheduler-status").textContent = settings.scheduler_enabled
+      ? "Enabled"
+      : "Disabled";
+    $("next-run").textContent = settings.scheduler_enabled && settings.next_run_at
+      ? `Next run: ${settings.next_run_at}`
+      : "Scheduler is off";
 
     const lastRun = runs[0];
     $("last-run").textContent = lastRun
-      ? `#${lastRun.id} ${lastRun.status} (${lastRun.started_at})`
-      : "no runs yet";
+      ? `#${lastRun.id} ${lastRun.status}`
+      : "No runs yet";
+    $("last-run-detail").textContent = lastRun
+      ? `${lastRun.started_at || ""} — ${lastRun.games_detected} games, ${lastRun.claimed_count} claimed`
+      : "Start a run manually or enable the scheduler";
 
     const interventions = accounts.filter(
       (a) => a.state === "needs_intervention" || a.state === "needs_authentication"
     );
+    setCardState(
+      "card-interventions",
+      interventions.length ? "warning" : "ok"
+    );
     $("interventions").textContent = interventions.length
-      ? interventions.map((a) => `${a.display_name} (${a.state})`).join(", ")
-      : "none";
+      ? String(interventions.length)
+      : "None";
 
     renderRecentClaims(claims);
     renderRecentRuns(runs);
-    $("scheduler-status").textContent = settings.scheduler_enabled
-      ? `enabled (every ${settings.scheduler_interval_seconds}s)`
-      : "disabled";
-    $("next-run").textContent = settings.scheduler_enabled && settings.next_run_at
-      ? `next run: ${settings.next_run_at}`
-      : "scheduler off";
   } catch (error) {
     $("health-status").textContent = error.message;
   }
 }
 
+function setCardState(id, kind) {
+  const card = $(id);
+  if (!card) return;
+  card.classList.remove("ok", "warning", "error", "neutral");
+  card.classList.add(kind);
+}
+
 function renderRecentRuns(runs) {
-  const body = $("recent-runs").querySelector("tbody");
+  const body = $("recent-logs").querySelector("tbody");
   body.innerHTML = runs
     .map(
       (r) =>
@@ -101,11 +136,11 @@ async function schedulerInfo() {
   try {
     const settings = await api("/api/settings");
     $("scheduler-status").textContent = settings.scheduler_enabled
-      ? `enabled (every ${settings.scheduler_interval_seconds}s)`
-      : "disabled";
+      ? "Enabled"
+      : "Disabled";
     $("next-run").textContent = settings.scheduler_enabled && settings.next_run_at
-      ? `next run: ${settings.next_run_at}`
-      : "scheduler off";
+      ? `Next run: ${settings.next_run_at}`
+      : "Scheduler is off";
   } catch (error) {
     $("scheduler-status").textContent = error.message;
   }
@@ -171,18 +206,35 @@ function renderExecution(runId, run, events) {
     .join("");
 }
 
-$("add-account").addEventListener("click", async () => {
+function showFeedback(elementId, message, isError = false) {
+  const el = $(elementId);
+  el.textContent = message;
+  el.classList.toggle("error", isError);
+}
+
+$("add-account-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
   const name = $("new-account-name").value.trim();
-  if (!name) return;
+  if (!name) {
+    showFeedback("add-account-feedback", "Please enter a display name.", true);
+    $("new-account-name").focus();
+    return;
+  }
+  showFeedback("add-account-feedback", "Adding account...", false);
   try {
-    await api("/api/accounts", {
+    const account = await api("/api/accounts", {
       method: "POST",
       body: JSON.stringify({ display_name: name }),
     });
     $("new-account-name").value = "";
+    showFeedback(
+      "add-account-feedback",
+      `Account "${escapeHtml(account.display_name)}" added. Click Authenticate to log in.`,
+      false
+    );
     loadAccounts();
   } catch (error) {
-    alert(error.message);
+    showFeedback("add-account-feedback", error.message, true);
   }
 });
 
@@ -208,7 +260,7 @@ async function loadAccounts() {
       )
       .join("");
   } catch (error) {
-    alert(error.message);
+    showFeedback("add-account-feedback", error.message, true);
   }
 }
 
@@ -344,14 +396,55 @@ function exportUrl(format) {
 $("export-csv").addEventListener("click", () => { window.location = exportUrl("csv"); });
 $("export-json").addEventListener("click", () => { window.location = exportUrl("json"); });
 
+function setupToggle(id, callback) {
+  const button = $(id);
+  function update(value) {
+    button.dataset.value = String(value);
+    button.textContent = value ? "Enabled" : "Disabled";
+    button.classList.toggle("active", value);
+  }
+  button.addEventListener("click", () => {
+    const next = button.dataset.value !== "true";
+    update(next);
+    if (callback) callback(next);
+  });
+  return { update };
+}
+
+const schedulerToggle = setupToggle("settings-scheduler-enabled");
+const telegramToggle = setupToggle("settings-telegram");
+
+function splitInterval(totalSeconds) {
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return { days, hours, minutes, seconds };
+}
+
+function readInterval() {
+  const days = Math.max(0, Number($("settings-interval-days").value) || 0);
+  const hours = Math.max(0, Math.min(23, Number($("settings-interval-hours").value) || 0));
+  const minutes = Math.max(0, Math.min(59, Number($("settings-interval-minutes").value) || 0));
+  const seconds = Math.max(0, Math.min(59, Number($("settings-interval-seconds").value) || 0));
+  return days * 86400 + hours * 3600 + minutes * 60 + seconds;
+}
+
 async function loadSettings() {
   try {
     const settings = await api("/api/settings");
-    $("settings-scheduler-enabled").value = String(settings.scheduler_enabled);
-    $("settings-interval").value = settings.scheduler_interval_seconds;
+    schedulerToggle.update(settings.scheduler_enabled);
+    telegramToggle.update(settings.telegram_enabled);
+
+    const interval = splitInterval(settings.scheduler_interval_seconds);
+    $("settings-interval-days").value = interval.days;
+    $("settings-interval-hours").value = interval.hours;
+    $("settings-interval-minutes").value = interval.minutes;
+    $("settings-interval-seconds").value = interval.seconds;
+
     $("settings-delay-min").value = settings.claim_delay_min_seconds;
     $("settings-delay-max").value = settings.claim_delay_max_seconds;
-    $("settings-telegram").value = String(settings.telegram_enabled);
+    $("settings-feedback").textContent = "";
   } catch (error) {
     alert(error.message);
   }
@@ -359,19 +452,25 @@ async function loadSettings() {
 
 $("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault();
+  const intervalSeconds = readInterval();
+  if (intervalSeconds < 1) {
+    showFeedback("settings-feedback", "Interval must be at least 1 second.", true);
+    return;
+  }
   const body = {
-    scheduler_enabled: $("settings-scheduler-enabled").value === "true",
-    scheduler_interval_seconds: Number($("settings-interval").value),
+    scheduler_enabled: $("settings-scheduler-enabled").dataset.value === "true",
+    scheduler_interval_seconds: intervalSeconds,
     claim_delay_min_seconds: Number($("settings-delay-min").value),
     claim_delay_max_seconds: Number($("settings-delay-max").value),
-    telegram_enabled: $("settings-telegram").value === "true",
+    telegram_enabled: $("settings-telegram").dataset.value === "true",
   };
   try {
     await api("/api/settings", { method: "PATCH", body: JSON.stringify(body) });
+    showFeedback("settings-feedback", "Settings saved.", false);
     schedulerInfo();
     loadSettings();
   } catch (error) {
-    alert(error.message);
+    showFeedback("settings-feedback", error.message, true);
   }
 });
 

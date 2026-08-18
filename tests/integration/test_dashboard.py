@@ -41,6 +41,26 @@ def test_dashboard_served(tmp_path):
     script = client.get("/static/app.js")
     assert "data-field=\"order\"" in script.text
     assert "api/runs/${runId}/events" in script.text
+    assert "add-account-form" in response.text
+    assert "settings-scheduler-enabled" in response.text
+    assert "settings-interval-hours" in response.text
+
+
+def test_create_account_via_api(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        response = client.post("/api/accounts", json={"display_name": "Personal"})
+    assert response.status_code == 200
+    data = response.json()
+    assert data["display_name"] == "Personal"
+    assert "id" in data
+
+
+def test_create_account_rejects_empty_name(tmp_path):
+    app = _make_app(tmp_path)
+    with TestClient(app) as client:
+        response = client.post("/api/accounts", json={"display_name": ""})
+    assert response.status_code == 422
 
 
 def test_export_csv(tmp_path):

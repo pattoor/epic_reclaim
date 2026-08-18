@@ -20,23 +20,26 @@
 
   <main>
     <section id="view-dashboard">
-      <div class="cards">
-        <div class="card">
-          <h3>Health</h3>
-          <p id="health-status">...</p>
+      <div class="cards summary">
+        <div class="card" id="card-health">
+          <div class="card-label">Health</div>
+          <div class="card-value" id="health-status">...</div>
+          <div class="card-detail" id="health-detail"></div>
         </div>
-        <div class="card">
-          <h3>Scheduler</h3>
-          <p id="scheduler-status">...</p>
-          <p id="next-run">...</p>
+        <div class="card" id="card-scheduler">
+          <div class="card-label">Scheduler</div>
+          <div class="card-value" id="scheduler-status">...</div>
+          <div class="card-detail" id="next-run">...</div>
         </div>
-        <div class="card">
-          <h3>Last run</h3>
-          <p id="last-run">...</p>
+        <div class="card" id="card-last-run">
+          <div class="card-label">Last run</div>
+          <div class="card-value" id="last-run">...</div>
+          <div class="card-detail" id="last-run-detail"></div>
         </div>
-        <div class="card">
-          <h3>Interventions</h3>
-          <p id="interventions">...</p>
+        <div class="card" id="card-interventions">
+          <div class="card-label">Interventions</div>
+          <div class="card-value" id="interventions">...</div>
+          <div class="card-detail">Accounts requiring attention</div>
         </div>
       </div>
       <div class="actions">
@@ -53,7 +56,7 @@
         </div>
         <div class="card wide">
           <h3>Recent runs</h3>
-          <table id="recent-runs">
+          <table id="recent-logs">
             <thead><tr><th>Id</th><th>Trigger</th><th>Status</th><th>Games</th><th>Claims</th><th>Errors</th></tr></thead>
             <tbody></tbody>
           </table>
@@ -62,9 +65,14 @@
     </section>
 
     <section id="view-accounts" hidden>
-      <div class="actions">
-        <input id="new-account-name" placeholder="Display name">
-        <button id="add-account">Add account</button>
+      <div class="panel">
+        <h3>Add Epic account</h3>
+        <form id="add-account-form" class="inline-form">
+          <input id="new-account-name" placeholder="Display name (e.g. Personal)" autocomplete="off">
+          <button type="submit" id="add-account">Add account</button>
+        </form>
+        <p id="add-account-feedback" class="feedback"></p>
+        <p class="hint">After adding, click <strong>Authenticate</strong> to log in from the server browser.</p>
       </div>
       <table id="accounts-table">
         <thead>
@@ -115,22 +123,55 @@
 
     <section id="view-settings" hidden>
       <form id="settings-form">
-        <label>Scheduler enabled
-          <select id="settings-scheduler-enabled"><option value="true">Yes</option><option value="false">No</option></select>
-        </label>
-        <label>Interval (seconds)
-          <input type="number" id="settings-interval">
-        </label>
-        <label>Claim delay min (seconds)
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-title">Scheduler enabled</span>
+            <span class="setting-hint">Automatically run the claim workflow at the configured interval.</span>
+          </div>
+          <button type="button" class="toggle" id="settings-scheduler-enabled" data-value="false">Disabled</button>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-title">Scheduler interval</span>
+            <span class="setting-hint">Example: 0 days, 6 hours, 0 minutes, 0 seconds = every 6 hours.</span>
+          </div>
+          <div class="interval-inputs">
+            <label><input type="number" id="settings-interval-days" min="0" value="0"> days</label>
+            <label><input type="number" id="settings-interval-hours" min="0" max="23" value="6"> hours</label>
+            <label><input type="number" id="settings-interval-minutes" min="0" max="59" value="0"> minutes</label>
+            <label><input type="number" id="settings-interval-seconds" min="0" max="59" value="0"> seconds</label>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-title">Claim delay min</span>
+            <span class="setting-hint">Minimum seconds between claim actions.</span>
+          </div>
           <input type="number" step="0.1" id="settings-delay-min">
-        </label>
-        <label>Claim delay max (seconds)
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-title">Claim delay max</span>
+            <span class="setting-hint">Maximum seconds between claim actions; must be >= minimum.</span>
+          </div>
           <input type="number" step="0.1" id="settings-delay-max">
-        </label>
-        <label>Telegram enabled
-          <select id="settings-telegram"><option value="true">Yes</option><option value="false">No</option></select>
-        </label>
-        <button type="submit">Save settings</button>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-title">Telegram enabled</span>
+            <span class="setting-hint">Requires Telegram token and chat id to be configured.</span>
+          </div>
+          <button type="button" class="toggle" id="settings-telegram" data-value="false">Disabled</button>
+        </div>
+
+        <div class="setting-actions">
+          <button type="submit">Save settings</button>
+          <span id="settings-feedback" class="feedback"></span>
+        </div>
       </form>
     </section>
   </main>

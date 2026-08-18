@@ -59,7 +59,7 @@ def test_auth_success_activates_account(tmp_path):
     )
     session = auth.start(account.id)
     assert session.status == "running"
-    assert session.screen_url.startswith("/auth-screen?token=")
+    assert session.screen_url.startswith("/api/auth-screen?token=")
 
     _wait(lambda: session.status != "running")
     assert session.status == "completed"

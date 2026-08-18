@@ -45,7 +45,7 @@ class FakeScreen(RemoteScreen):
         return ":99" if self._available else None
 
     def screen_url(self, token: str | None = None) -> str | None:
-        return f"/auth-screen?token={token or ''}" if self._available else None
+        return f"/api/auth-screen?token={token or ''}" if self._available else None
 
     def stop(self) -> None:
         self.stopped = True

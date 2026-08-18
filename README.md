@@ -86,7 +86,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. El puerto `6080` se publica para la pantalla noVNC durante autenticaciones.
+Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. El puerto `6080` se publica para la pantalla noVNC durante autenticaciones; desde otro dispositivo, la pantalla remota se carga a traves del dashboard y luego conecta a `http://<IP_DEL_SERVIDOR>:6080`, por lo que ambos puertos deben ser accesibles.
 
 Los volumenes conservan:
 

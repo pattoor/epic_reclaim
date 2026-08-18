@@ -200,7 +200,7 @@ class NoVNCProvider(RemoteScreen):
             self._last_error = error
             return None
         token = token or ""
-        return f"/auth-screen?token={token}&port={self._ws_port}"
+        return f"/api/auth-screen?token={token}&port={self._ws_port}"
 
     def stop(self) -> None:
         for process in self._processes:

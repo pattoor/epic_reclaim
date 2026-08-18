@@ -307,7 +307,10 @@ async function startAuth(accountId) {
     state.authToken = session.token;
     $("auth-panel").hidden = false;
     if (session.screen_url) {
-      $("auth-screen").src = session.screen_url;
+      const fullUrl = new URL(session.screen_url, window.location.origin).toString();
+      $("auth-link").href = fullUrl;
+      window.open(fullUrl, "_blank", "noopener,noreferrer");
+      $("auth-status").textContent = "Remote browser opened in a new tab. Complete the login there.";
     } else {
       $("auth-status").textContent = "remote screen unavailable";
     }
@@ -324,7 +327,6 @@ async function pollAuth() {
     $("auth-status").textContent = `status: ${session.status}`;
     if (session.status === "completed" || session.status === "failed") {
       loadAccounts();
-      $("auth-screen").src = "";
       if (state.authPollTimer) {
         clearInterval(state.authPollTimer);
         state.authPollTimer = null;

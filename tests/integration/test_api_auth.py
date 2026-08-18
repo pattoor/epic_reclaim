@@ -45,11 +45,7 @@ def test_authenticate_creates_account_and_endpoint(tmp_path):
         data = response.json()
         assert data["token"] != ""
         assert data["screen_url"] is not None
-        assert data["screen_url"].startswith("/api/auth-screen")
-
-        screen = client.get(data["screen_url"])
-        assert screen.status_code == 200
-        assert "remote browser" in screen.text
+        assert data["screen_url"].startswith("/api/remote-screen/")
 
         status = client.get(f"/api/auth/{data['token']}")
         assert status.status_code == 200
@@ -59,10 +55,10 @@ def test_authenticate_creates_account_and_endpoint(tmp_path):
         assert revoked.status_code == 200
 
 
-def test_auth_screen_returns_404_for_unknown_token(tmp_path):
+def test_remote_screen_proxy_returns_404_for_unknown_token(tmp_path):
     app = _make_app(tmp_path)
     with TestClient(app) as client:
-        response = client.get("/api/auth-screen?token=unknown-token&port=6080")
+        response = client.get("/api/remote-screen/unknown-token")
     assert response.status_code == 404
 
 

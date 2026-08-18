@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api import router
+from .auth_proxy import AuthProxy
 from .config import Settings
 from .database import Database
 from .integrations.auth_browser import PlaywrightAuthBrowser
@@ -130,9 +131,16 @@ def create_app(
         yield
         await scheduler.stop()
         auth_service.close_all()
+        await auth_proxy.close()
         logger.info("application_stopped", extra={"context": {"app": "epic_reclaim"}})
 
     app = FastAPI(title="Epic Reclaim", lifespan=lifespan)
+
+    auth_proxy = AuthProxy(
+        auth_service,
+        ws_port=getattr(screen, "_ws_port", getattr(screen, "ws_port", 6080)),
+    )
+    app.include_router(auth_proxy.router())
 
     @app.get("/health")
     def health() -> dict:

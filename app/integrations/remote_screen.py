@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 class RemoteScreen(ABC):
+    ws_port: int = 6080
+
     @abstractmethod
     def available(self) -> bool:
         pass
@@ -200,7 +202,7 @@ class NoVNCProvider(RemoteScreen):
             self._last_error = error
             return None
         token = token or ""
-        return f"/api/auth-screen?token={token}&port={self._ws_port}"
+        return f"/api/remote-screen/{token}"
 
     def stop(self) -> None:
         for process in self._processes:

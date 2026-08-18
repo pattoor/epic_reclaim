@@ -26,6 +26,8 @@ class FakeAuthBrowser(InteractiveAuthBrowser):
 
 
 class FakeScreen(RemoteScreen):
+    ws_port = 6080
+
     def __init__(self, available: bool = True):
         self._available = available
         self.started = False
@@ -45,7 +47,7 @@ class FakeScreen(RemoteScreen):
         return ":99" if self._available else None
 
     def screen_url(self, token: str | None = None) -> str | None:
-        return f"/api/auth-screen?token={token or ''}" if self._available else None
+        return f"/api/remote-screen/{token or ''}" if self._available else None
 
     def stop(self) -> None:
         self.stopped = True

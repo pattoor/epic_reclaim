@@ -125,38 +125,40 @@ class AuthService:
             )
 
     def _complete(self, session: AuthSession, outcome) -> None:
-        with self._database.connect() as connection:
-            account = self._repository.get(connection, session.account_id)
-            if outcome.success:
-                display_name = outcome.display_name or account.display_name
-                self._repository.update(
-                    connection,
-                    session.account_id,
-                    state=AccountState.ACTIVE,
-                    epic_identity=outcome.epic_identity,
-                    display_name=display_name,
-                    last_block_reason=None,
-                )
-                session.status = "completed"
-            elif outcome.needs_intervention:
-                self._repository.update(
-                    connection,
-                    session.account_id,
-                    state=AccountState.NEEDS_INTERVENTION,
-                    last_block_reason=outcome.error,
-                )
-                session.status = "completed"
-                session.error = outcome.error
-            else:
-                self._repository.update(
-                    connection,
-                    session.account_id,
-                    state=AccountState.NEEDS_AUTHENTICATION,
-                    last_block_reason=outcome.error,
-                )
-                session.status = "completed"
-                session.error = outcome.error
-        self._screen.stop()
+        try:
+            with self._database.connect() as connection:
+                account = self._repository.get(connection, session.account_id)
+                if outcome.success:
+                    display_name = outcome.display_name or account.display_name
+                    self._repository.update(
+                        connection,
+                        session.account_id,
+                        state=AccountState.ACTIVE,
+                        epic_identity=outcome.epic_identity,
+                        display_name=display_name,
+                        last_block_reason=None,
+                    )
+                    session.status = "completed"
+                elif outcome.needs_intervention:
+                    self._repository.update(
+                        connection,
+                        session.account_id,
+                        state=AccountState.NEEDS_INTERVENTION,
+                        last_block_reason=outcome.error,
+                    )
+                    session.status = "completed"
+                    session.error = outcome.error
+                else:
+                    self._repository.update(
+                        connection,
+                        session.account_id,
+                        state=AccountState.NEEDS_AUTHENTICATION,
+                        last_block_reason=outcome.error,
+                    )
+                    session.status = "completed"
+                    session.error = outcome.error
+        finally:
+            self._screen.stop()
 
     def get(self, token: str) -> AuthSession | None:
         return self._sessions.get(token)

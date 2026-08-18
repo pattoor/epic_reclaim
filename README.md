@@ -86,7 +86,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. El puerto `6080` se publica para la pantalla noVNC durante autenticaciones; desde otro dispositivo, la pantalla remota se carga a traves del dashboard y luego conecta a `http://<IP_DEL_SERVIDOR>:6080`, por lo que ambos puertos deben ser accesibles.
+Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. La autenticacion remota se sirve a traves del mismo puerto `8765` mediante un proxy interno, por lo que no es necesario exponer el puerto `6080` fuera del contenedor.
 
 Los volumenes conservan:
 
@@ -106,7 +106,7 @@ docker compose up -d --build   # reconstruir tras cambios
 
 ### Autenticacion interactiva con noVNC
 
-La imagen instala Xvfb, x11vnc, websockify y el cliente web noVNC. Al iniciar **Authenticate** desde el dashboard, la aplicacion lanza un navegador headed en el servidor y lo expone en una pantalla remota protegida con una contrasena por sesion; el usuario completa login, MFA o CAPTCHA manualmente desde esa pantalla. Si la pantalla remota no esta disponible (por ejemplo, sin las herramientas instaladas), el endpoint de autenticacion devuelve 503 y `/health` reporta `remote_screen: unavailable`.
+La imagen instala Xvfb, x11vnc, websockify y el cliente web noVNC. Al iniciar **Authenticate** desde el dashboard, la aplicacion abre una pestaña nueva con noVNC servido por el mismo puerto `8765` a traves de un proxy interno. El navegador remoto corre en `g7-server`; el usuario completa login, MFA o CAPTCHA manualmente desde esa pestaña. Una vez detectado el inicio de sesion, el servidor detiene noVNC, cierra el navegador y conserva unicamente el perfil persistente de Playwright. No se exponen cookies, CDP ni credenciales. Si la pantalla remota no esta disponible, el endpoint devuelve 503 y `/health` reporta `remote_screen: unavailable` junto con el diagnostico.
 
 ## Ejecucion sin Docker
 
@@ -256,7 +256,7 @@ Los tests automatizados no deben depender continuamente de la tienda Epic en viv
 
 - **Puerto ocupado:** cambiar `APP_PORT` y el puerto publicado por Docker Compose.
 - **Chromium o Playwright falla:** instalar las dependencias del navegador y revisar logs del contenedor.
-- **Remote screen unavailable / error 503 al autenticar:** revisar `GET /health` y `remote_screen_diagnostics`. Puede deberse a puertos ocupados (`5900`, `6080`), procesos que no arrancan, noVNC web dir no encontrado o falta de permisos. Los logs del contenedor mostraran el motivo exacto.
+- **Remote screen unavailable / error 503 al autenticar:** revisar `GET /health` y `remote_screen_diagnostics`. Puede deberse a procesos que no arrancan, noVNC web dir no encontrado o falta de permisos. El puerto `6080` solo se usa internamente dentro del contenedor; no necesita estar expuesto fuera de el.
 - **Sesion expirada:** iniciar reautenticacion desde **Accounts**.
 - **CAPTCHA o MFA:** completar la accion manualmente en el navegador del servidor.
 - **Telegram no configurado:** dashboard, historial y scheduler siguen funcionando sin Telegram.

@@ -212,35 +212,6 @@ def revoke_auth(token: str, request: Request):
     return {"status": "revoked"}
 
 
-@router.get("/auth-screen")
-def auth_screen(request: Request, token: str, port: int = 6080):
-    from fastapi.responses import HTMLResponse
-
-    session = _auth_service(request).get(token)
-    if session is None:
-        raise HTTPException(status_code=404, detail="session not found")
-    password = session.vnc_password or ""
-    html = f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Epic Reclaim auth</title></head>
-<body style="margin:0;font-family:system-ui,sans-serif;background:#1a1a1a;color:#eee">
-<script>
-(function() {{
-  var host = window.location.hostname;
-  var url = 'http://' + host + ':{port}/vnc.html?autoconnect=true&resize=scale&password=' + encodeURIComponent('{password}');
-  var frame = document.createElement('iframe');
-  frame.src = url;
-  frame.width = '100%';
-  frame.height = '100%';
-  frame.style.border = '0';
-  frame.style.minHeight = '100vh';
-  frame.title = 'remote browser';
-  document.body.appendChild(frame);
-}})();
-</script>
-</body></html>"""
-    return HTMLResponse(html)
-
-
 # Games
 
 

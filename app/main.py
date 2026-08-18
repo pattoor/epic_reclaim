@@ -135,16 +135,25 @@ def create_app(
     app = FastAPI(title="Epic Reclaim", lifespan=lifespan)
 
     @app.get("/health")
-    def health() -> dict[str, str]:
+    def health() -> dict:
         try:
             database_status = "ok" if database.check() else "error"
         except Exception:
             database_status = "error"
+        diagnostics = screen.diagnostics()
+        available = diagnostics.get("tools", {})
+        tools_ok = all(available.values()) if available else False
+        novnc_ok = diagnostics.get("novnc_web_dir_exists", False)
         return {
             "status": "ok" if database_status == "ok" else "error",
             "database": database_status,
             "playwright": _playwright_status(),
             "remote_screen": "available" if screen.available() else "unavailable",
+            "remote_screen_diagnostics": {
+                "tools_present": tools_ok,
+                "novnc_web_dir_exists": novnc_ok,
+                "last_error": diagnostics.get("last_error"),
+            },
         }
 
     app.include_router(router)

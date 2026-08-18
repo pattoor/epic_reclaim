@@ -256,6 +256,7 @@ Los tests automatizados no deben depender continuamente de la tienda Epic en viv
 
 - **Puerto ocupado:** cambiar `APP_PORT` y el puerto publicado por Docker Compose.
 - **Chromium o Playwright falla:** instalar las dependencias del navegador y revisar logs del contenedor.
+- **Remote screen unavailable / error 503 al autenticar:** revisar `GET /health` y `remote_screen_diagnostics`. Puede deberse a puertos ocupados (`5900`, `6080`), procesos que no arrancan, noVNC web dir no encontrado o falta de permisos. Los logs del contenedor mostraran el motivo exacto.
 - **Sesion expirada:** iniciar reautenticacion desde **Accounts**.
 - **CAPTCHA o MFA:** completar la accion manualmente en el navegador del servidor.
 - **Telegram no configurado:** dashboard, historial y scheduler siguen funcionando sin Telegram.

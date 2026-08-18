@@ -53,16 +53,34 @@ class AuthService:
             )
 
         if not self._screen.available():
+            diagnostics = self._screen.diagnostics()
+            missing = [tool for tool, present in diagnostics.get("tools", {}).items() if not present]
+            if missing:
+                reason = f"missing remote screen tools: {', '.join(missing)}"
+            elif not diagnostics.get("novnc_web_dir_exists"):
+                reason = f"noVNC web directory not found: {diagnostics.get('novnc_web_dir')}"
+            else:
+                reason = "remote screen not available"
             return AuthSession(
                 token="",
                 account_id=account_id,
                 screen_url=None,
                 status="unavailable",
-                error="remote screen not available",
+                error=reason,
             )
 
         vnc_password = secrets.token_urlsafe(16)
         display = self._screen.start(vnc_password)
+        if display is None:
+            diagnostics = self._screen.diagnostics()
+            last_error = diagnostics.get("last_error") or "remote screen failed to start"
+            return AuthSession(
+                token="",
+                account_id=account_id,
+                screen_url=None,
+                status="unavailable",
+                error=last_error,
+            )
         token = secrets.token_urlsafe(24)
         session = AuthSession(
             token=token,

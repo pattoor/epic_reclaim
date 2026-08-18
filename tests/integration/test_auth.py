@@ -130,6 +130,33 @@ def test_auth_unavailable_when_no_remote_screen(tmp_path):
     session = auth.start(account.id)
     assert session.status == "unavailable"
     assert session.token == ""
+    assert session.error is not None
+
+
+def test_auth_reports_failure_when_screen_start_returns_none(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    class FailingStartScreen(FakeScreen):
+        def __init__(self):
+            super().__init__(available=True)
+            self._diagnostics["last_error"] = "port 6080 is already in use"
+
+        def start(self, password: str) -> str | None:
+            return None
+
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=FailingStartScreen(),
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id)
+    assert session.status == "unavailable"
+    assert "port 6080" in (session.error or "")
 
 
 def test_auth_rejects_second_concurrent_flow_for_account(tmp_path):

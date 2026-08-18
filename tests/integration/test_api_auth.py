@@ -30,6 +30,10 @@ def test_health_reports_remote_screen(tmp_path):
         response = client.get("/health")
     assert response.status_code == 200
     assert "remote_screen" in response.json()
+    diagnostics = response.json()["remote_screen_diagnostics"]
+    assert "tools_present" in diagnostics
+    assert "novnc_web_dir_exists" in diagnostics
+    assert "last_error" in diagnostics
 
 
 def test_authenticate_creates_account_and_endpoint(tmp_path):

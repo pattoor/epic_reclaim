@@ -31,9 +31,13 @@ class FakeScreen(RemoteScreen):
         self.started = False
         self.stopped = False
         self.password = None
+        self._diagnostics = {"running": False}
 
     def available(self) -> bool:
         return self._available
+
+    def diagnostics(self) -> dict:
+        return self._diagnostics
 
     def start(self, password: str) -> str | None:
         self.started = True

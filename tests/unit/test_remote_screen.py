@@ -8,6 +8,9 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
         def terminate(self):
             pass
 
+        def poll(self):
+            return None
+
     monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda _: "tool")
     monkeypatch.setattr("app.integrations.remote_screen.subprocess.run", lambda command, **kwargs: commands.append(command))
     monkeypatch.setattr(
@@ -28,4 +31,27 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
     assert "--web" in websockify
     assert str(tmp_path) in websockify
 
+    diagnostics = provider.diagnostics()
+    assert diagnostics["tools"]["Xvfb"] is True
+    assert diagnostics["novnc_web_dir_exists"] is True
+    assert diagnostics["running"] is True
+
     provider.stop()
+
+
+def test_novnc_reports_missing_tools(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda tool: None)
+    provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
+    assert provider.available() is False
+    diagnostics = provider.diagnostics()
+    assert diagnostics["tools"]["Xvfb"] is False
+    assert provider.start("password") is None
+    assert "missing tools" in (provider.diagnostics()["last_error"] or "").lower()
+
+
+def test_novnc_reports_missing_novnc_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda _: "tool")
+    provider = NoVNCProvider(novnc_web_dir=str(tmp_path / "missing"))
+    assert provider.available() is False
+    diagnostics = provider.diagnostics()
+    assert diagnostics["novnc_web_dir_exists"] is False

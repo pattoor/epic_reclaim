@@ -62,6 +62,17 @@ def test_remote_screen_proxy_returns_404_for_unknown_token(tmp_path):
     assert response.status_code == 404
 
 
+def test_remote_screen_proxy_uses_response_not_streaming(tmp_path):
+    app = _make_app(tmp_path, screen=FakeScreen(available=True))
+    with TestClient(app) as client:
+        account_id = _create_account(app)
+        response = client.post(f"/api/accounts/{account_id}/authenticate")
+        data = response.json()
+        screen = client.get(data["screen_url"])
+        assert screen.status_code == 200
+        assert "transfer-encoding" not in screen.headers
+
+
 def test_authenticate_unknown_account_404(tmp_path):
     app = _make_app(tmp_path)
     with TestClient(app) as client:

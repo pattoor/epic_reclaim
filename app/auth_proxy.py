@@ -9,11 +9,10 @@ the local websockify instance started by NoVNCProvider.
 from __future__ import annotations
 
 import asyncio
-from urllib.parse import urlparse
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response
 from starlette.websockets import WebSocket
 
 
@@ -60,10 +59,16 @@ class AuthProxy:
         response_headers = {
             k: v
             for k, v in upstream.headers.items()
-            if k.lower() not in ("transfer-encoding", "content-length", "connection")
+            if k.lower()
+            not in (
+                "transfer-encoding",
+                "content-length",
+                "content-encoding",
+                "connection",
+            )
         }
-        return StreamingResponse(
-            upstream.aiter_raw(),
+        return Response(
+            content=upstream.content,
             status_code=upstream.status_code,
             headers=response_headers,
         )

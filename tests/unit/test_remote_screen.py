@@ -11,11 +11,22 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
         def poll(self):
             return None
 
+        stderr = None
+
     monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda _: "tool")
     monkeypatch.setattr("app.integrations.remote_screen.subprocess.run", lambda command, **kwargs: commands.append(command))
+
+    def fake_popen(command, **kwargs):
+        commands.append(command)
+        return Process()
+
     monkeypatch.setattr(
         "app.integrations.remote_screen.subprocess.Popen",
-        lambda command, **kwargs: (commands.append(command) or Process()),
+        fake_popen,
+    )
+    monkeypatch.setattr(
+        "app.integrations.remote_screen.NoVNCProvider._wait_for_port",
+        lambda self, port, timeout: True,
     )
 
     provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
@@ -55,3 +66,24 @@ def test_novnc_reports_missing_novnc_dir(monkeypatch, tmp_path):
     assert provider.available() is False
     diagnostics = provider.diagnostics()
     assert diagnostics["novnc_web_dir_exists"] is False
+
+
+def test_novnc_fails_when_port_does_not_listen(monkeypatch, tmp_path):
+    commands = []
+
+    class Process:
+        def terminate(self):
+            pass
+
+        def poll(self):
+            return None
+
+        stderr = None
+
+    monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda _: "tool")
+    monkeypatch.setattr("app.integrations.remote_screen.subprocess.run", lambda command, **kwargs: commands.append(command))
+    monkeypatch.setattr("app.integrations.remote_screen.subprocess.Popen", lambda command, **kwargs: (commands.append(command) or Process()))
+
+    provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
+    assert provider.start("session-password") is None
+    assert "did not start listening" in (provider.diagnostics()["last_error"] or "")

@@ -6,6 +6,7 @@ import shutil
 import socket
 import subprocess
 import tempfile
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -50,12 +51,17 @@ class NoVNCProvider(RemoteScreen):
         vnc_port: int = 5900,
         ws_port: int = 6080,
         novnc_web_dir: str | None = None,
+        startup_timeout_seconds: float = 10.0,
+        startup_poll_interval: float = 0.2,
     ):
         self._display = display
         self._vnc_port = vnc_port
         self._ws_port = ws_port
         self._novnc_web_dir = novnc_web_dir or "/usr/share/novnc"
+        self._startup_timeout_seconds = startup_timeout_seconds
+        self._startup_poll_interval = startup_poll_interval
         self._processes: list[subprocess.Popen] = []
+        self._stderrs: list[subprocess.Popen] = []
         self._passfile: Path | None = None
         self._last_error: str | None = None
 
@@ -63,6 +69,9 @@ class NoVNCProvider(RemoteScreen):
         tools = ("Xvfb", "x11vnc", "websockify")
         tool_status = {tool: shutil.which(tool) is not None for tool in tools}
         novnc_exists = Path(self._novnc_web_dir).is_dir()
+        alive, error = self._check_processes_alive()
+        vnc_listening = self._port_is_listening(self._vnc_port)
+        ws_listening = self._port_is_listening(self._ws_port)
         return {
             "tools": tool_status,
             "novnc_web_dir": self._novnc_web_dir,
@@ -70,6 +79,10 @@ class NoVNCProvider(RemoteScreen):
             "vnc_port": self._vnc_port,
             "ws_port": self._ws_port,
             "display": self._display,
+            "processes_alive": alive,
+            "processes_alive_error": error,
+            "vnc_listening": vnc_listening,
+            "ws_listening": ws_listening,
             "last_error": self._last_error,
             "running": bool(self._processes),
         }
@@ -91,11 +104,44 @@ class NoVNCProvider(RemoteScreen):
                 return True
         return False
 
+    def _port_is_listening(self, port: int) -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.5)
+            try:
+                sock.connect(("127.0.0.1", port))
+                return True
+            except OSError:
+                return False
+
+    def _wait_for_port(self, port: int, timeout_seconds: float) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if self._port_is_listening(port):
+                return True
+            time.sleep(self._startup_poll_interval)
+        return False
+
     def _check_processes_alive(self) -> tuple[bool, str | None]:
         for process, name in zip(self._processes, ("Xvfb", "x11vnc", "websockify")):
             if process.poll() is not None:
-                return False, f"{name} exited with code {process.returncode}"
+                stderr = self._read_stderr(process)
+                detail = f"stderr: {stderr}" if stderr else f"exit code {process.returncode}"
+                return False, f"{name} died ({detail})"
         return True, None
+
+    def _read_stderr(self, process: subprocess.Popen) -> str:
+        if process.stderr is None:
+            return ""
+        try:
+            data = process.stderr.read()
+            if isinstance(data, bytes):
+                return data.decode("utf-8", errors="replace")[:500]
+            return str(data)[:500]
+        except Exception:
+            return ""
+
+    def _collect_stderrs(self) -> list[str]:
+        return [self._read_stderr(p) for p in self._processes if p.stderr is not None]
 
     def start(self, password: str) -> str | None:
         self._last_error = None
@@ -136,7 +182,7 @@ class NoVNCProvider(RemoteScreen):
         xvfb = subprocess.Popen(
             ["Xvfb", self._display, "-screen", "0", "1280x800x24"],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         x11vnc = subprocess.Popen(
             [
@@ -151,18 +197,18 @@ class NoVNCProvider(RemoteScreen):
                 str(self._vnc_port),
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         websockify = subprocess.Popen(
             [
                 "websockify",
-                str(self._ws_port),
-                f"localhost:{self._vnc_port}",
                 "--web",
                 self._novnc_web_dir,
+                str(self._ws_port),
+                f"127.0.0.1:{self._vnc_port}",
             ],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         self._processes = [xvfb, x11vnc, websockify]
 
@@ -170,6 +216,18 @@ class NoVNCProvider(RemoteScreen):
         if not alive:
             self._last_error = error
             logger.error("remote_screen_process_died: %s", error)
+            self.stop()
+            return None
+
+        if not self._wait_for_port(self._vnc_port, self._startup_timeout_seconds):
+            self._last_error = f"x11vnc did not start listening on port {self._vnc_port}; stderr: {self._collect_stderrs()}"
+            logger.error(self._last_error)
+            self.stop()
+            return None
+
+        if not self._wait_for_port(self._ws_port, self._startup_timeout_seconds):
+            self._last_error = f"websockify did not start listening on port {self._ws_port}; stderr: {self._collect_stderrs()}"
+            logger.error(self._last_error)
             self.stop()
             return None
 

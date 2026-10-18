@@ -125,6 +125,31 @@ class NoVNCProvider(RemoteScreen):
             return False
         return True
 
+    def _terminate_stale_processes(self) -> None:
+        """Kill leftover Xvfb/x11vnc/websockify from an interrupted session.
+
+        In the single-purpose container only this application owns these
+        tools; killing by name keeps the ports reusable after a crash or a
+        killed exec session. Harmless no-op outside Linux.
+        """
+        if not (shutil.which("pkill") and shutil.which("ps")):
+            return
+        for pattern in ("Xvfb", "x11vnc", "websockify"):
+            try:
+                subprocess.run(
+                    ["pkill", "-f", pattern],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
+            except OSError:  # pragma: no cover - defensive
+                continue
+        # give the kernel a beat to release the listening sockets
+        try:
+            time.sleep(0.3)
+        except Exception:  # pragma: no cover
+            pass
+
     def _port_in_use(self, port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -180,6 +205,8 @@ class NoVNCProvider(RemoteScreen):
             logger.error("remote_screen_unavailable: %s", self._last_error)
             return None
 
+        if self._port_in_use(self._vnc_port):
+            self._terminate_stale_processes()
         if self._port_in_use(self._vnc_port):
             self._last_error = f"VNC port {self._vnc_port} is already in use"
             logger.error(self._last_error)

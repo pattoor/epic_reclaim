@@ -43,7 +43,13 @@ class AccountSession(ABC):
 
 class EpicAdapter(ABC):
     @abstractmethod
-    def discover_free_games(self) -> list[GameCandidate]:
+    def discover_free_games(self, profile_account_id: int | None = None) -> list[GameCandidate]:
+        """Browse the Free Games section.
+
+        `profile_account_id` optionally reuses that account's persistent
+        browser profile (the user's own logged-in session) so store pages
+        open with genuine cookies; discovery is only a public-page visit.
+        """
         pass
 
     @abstractmethod

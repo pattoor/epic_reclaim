@@ -35,7 +35,7 @@ class FakeEpicAdapter(EpicAdapter):
     def _key(self, game: GameCandidate) -> str:
         return game.epic_id or game.url or game.name
 
-    def discover_free_games(self) -> list[GameCandidate]:
+    def discover_free_games(self, profile_account_id: int | None = None) -> list[GameCandidate]:
         if self.fail_discovery is not None:
             raise self.fail_discovery
         return list(self.games)

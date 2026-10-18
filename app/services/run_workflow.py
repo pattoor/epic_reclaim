@@ -169,7 +169,11 @@ class RunWorkflow:
             with self._database.connect() as connection:
                 try:
                     games = self._retry_transient(
-                        lambda: self._discovery.discover(connection), max_attempts
+                        lambda: self._discovery.discover(
+                            connection,
+                            profile_account_id=self._discovery_profile_account(connection),
+                        ),
+                        max_attempts,
                     )
                 except (InterventionRequiredError, RateLimitError, AccountBlockedError, AuthenticationRequiredError) as exc:
                     self._pause_active_accounts(
@@ -278,6 +282,20 @@ class RunWorkflow:
         if self._notifier is not None:
             self._notifier.notify_run_summary(outcome)
         return outcome
+
+    def _discovery_profile_account(self, connection) -> int | None:
+        """Discovery reuses an authenticated account's persistent profile when
+        available (the user's own cookies from the manual login) so the store
+        pages open without triggering fresh anti-bot challenges. Purely a
+        public-page read; never claims anything with it."""
+        try:
+            accounts = self._accounts.list(connection)
+        except Exception:  # pragma: no cover - defensive
+            return None
+        for account in accounts:
+            if account.epic_identity:
+                return account.id
+        return None
 
     def _pause_active_accounts(
         self, connection, run_id, state, reason, counters

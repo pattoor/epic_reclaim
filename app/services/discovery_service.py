@@ -9,8 +9,8 @@ class DiscoveryService:
         self._adapter = adapter
         self._repository = repository
 
-    def discover(self, connection) -> list:
-        candidates = self._adapter.discover_free_games()
+    def discover(self, connection, profile_account_id: int | None = None) -> list:
+        candidates = self._adapter.discover_free_games(profile_account_id=profile_account_id)
         games = []
         for candidate in candidates:
             games.append(

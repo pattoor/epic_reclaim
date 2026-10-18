@@ -62,6 +62,7 @@ class SlotRunner:
         with self._database.connect() as connection:
             settings = self._settings_service.load(connection)
         if not settings.scheduler_enabled:
+            self.next_run_at = None
             return TickResult(fired=False)
 
         slots = settings.slots()
@@ -137,7 +138,13 @@ class Scheduler:
         slot_window_seconds: int = DEFAULT_SLOT_WINDOW_SECONDS,
     ):
         self._check_interval = max(check_interval_seconds, 30.0)
-        self._work_slot_window = slot_window_seconds
+        # The firing window must comfortably span several polling ticks;
+        # otherwise a slow-polling scheduler can skip slots entirely.
+        effective_window = max(
+            slot_window_seconds or DEFAULT_SLOT_WINDOW_SECONDS,
+            self._check_interval * 2,
+        )
+        self._work_slot_window = effective_window
         self._clock = clock
         self._settings_service = settings_service
         self._database = database

@@ -32,20 +32,21 @@ def _settings(tmp_path, **overrides):
     return Settings.from_env(env)
 
 
-def test_legacy_interval_migrates_to_daily_preset(tmp_path):
+def test_legacy_interval_is_migrated_on_first_load(tmp_path):
+    """The SAME load() call that migrates must already return migrated values."""
     settings = _settings(tmp_path)
     database = Database(settings.database_path)
     database.initialize()
     with database.connect() as connection:
-        SettingsRepository().set(connection, "scheduler_interval_seconds", "1440")
+        SettingsRepository().set(connection, "scheduler_interval_seconds", "86400")
         service = SettingsService(settings, SettingsRepository())
         effective = service.load(connection)
-        assert effective.scheduler_daily is False  # migrated weekly slot
-        assert effective.scheduler_days.endswith("THU") or effective.scheduler_days == "THU" or \
-               effective.scheduler_days == "MON,TUE,WED,THU,FRI,SAT,SUN"
+        # migrated weekly slot, visible on the very first load (no second pass)
+        assert effective.scheduler_days == "MON,TUE,WED,THU,FRI,SAT,SUN"
+        assert effective.scheduler_times == "14:05"
         raw = SettingsRepository().all(connection)
     assert "scheduler_interval_seconds" not in raw
-    assert raw["scheduler_days"]  # migrated
+    assert "scheduler_interval_seconds_migrated" not in raw
 
 
 def test_legacy_interval_24h_migrates_to_full_days(tmp_path):

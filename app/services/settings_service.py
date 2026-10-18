@@ -61,6 +61,10 @@ class SettingsService:
             value = stored.get(key)
             return int(value) if value is not None else default
 
+        # NOTE: legacy migration writes into the repository during this same
+        # load; refresh the snapshot so the FIRST result already reflects the
+        # migrated schedule (the first tick must use the right slots).
+        stored = self._repository.all(connection)
         return EffectiveSettings(
             scheduler_enabled=get_bool("scheduler_enabled", self._settings.scheduler_enabled),
             scheduler_days=get_str("scheduler_days", self._settings.scheduler_days),
@@ -98,7 +102,7 @@ class SettingsService:
                 interval,
                 days,
             )
-        self._repository.set(connection, self.LEGACY_INTERVAL_KEY + "_migrated", "true")
+        # The legacy key is idempotently deleted; no further marker needed.
         connection.execute("DELETE FROM settings WHERE key = ?", (self.LEGACY_INTERVAL_KEY,))
         connection.commit()
 

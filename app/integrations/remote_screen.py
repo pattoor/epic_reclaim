@@ -205,8 +205,10 @@ class NoVNCProvider(RemoteScreen):
             logger.error("remote_screen_unavailable: %s", self._last_error)
             return None
 
-        if self._port_in_use(self._vnc_port):
-            self._terminate_stale_processes()
+        for port_name, port in (("VNC", self._vnc_port), ("websockify", self._ws_port)):
+            if self._port_in_use(port):
+                self._terminate_stale_processes()
+                break
         if self._port_in_use(self._vnc_port):
             self._last_error = f"VNC port {self._vnc_port} is already in use"
             logger.error(self._last_error)
@@ -215,6 +217,13 @@ class NoVNCProvider(RemoteScreen):
             self._last_error = f"websockify port {self._ws_port} is already in use"
             logger.error(self._last_error)
             return None
+        if not self._public_host:
+            # Container deployments MUST set PUBLIC_HOST: without it the URL
+            # is only reachable from inside the container.
+            logger.warning(
+                "public_host_unset: the returned screen URL will only be "
+                "usable from inside the container (set PUBLIC_HOST)"
+            )
 
         fd, passfile = tempfile.mkstemp(prefix="epic-reclaim-vnc-")
         os.close(fd)

@@ -137,7 +137,8 @@ def _accounts_menu(runtime: Runtime) -> None:
         print(" 2) Autenticar cuenta")
         print(" 3) Editar cuenta (nombre / orden / enabled)")
         print(" 4) Resolver intervención")
-        print(" 5) Eliminar permanentemente")
+        print(" 5) Detener sesión de autenticación activa")
+        print(" 6) Eliminar permanentemente")
         print(" 0) Volver")
         choice = _input("Cuentas> ")
         if choice == "1":
@@ -149,6 +150,8 @@ def _accounts_menu(runtime: Runtime) -> None:
         elif choice == "4":
             _resolve_intervention(runtime)
         elif choice == "5":
+            _stop_auth_session(runtime)
+        elif choice == "6":
             _delete_account(runtime)
         elif choice in {"0", "q", "Q"}:
             return
@@ -258,6 +261,24 @@ def _resolve_intervention(runtime: Runtime) -> None:
     with runtime.database.connect() as connection:
         resolved = runtime.account_service.resolve_intervention(connection, account_id)
     print(f"✓ Cuenta #{resolved.id} vuelve a {resolved.state}.")
+
+
+def _stop_auth_session(runtime: Runtime) -> None:
+    with runtime.database.connect() as connection:
+        accounts = runtime.account_service.list(connection)
+    if not accounts:
+        print("No hay cuentas.")
+        return
+    for account in accounts:
+        print(f" {account.id}) {account.display_name}")
+    raw = _input("ID de cuenta cuya autenticación detener> ")
+    try:
+        account_id = int(raw)
+    except ValueError:
+        print("ID inválido.")
+        return
+    runtime.auth_service.revoke_account(account_id)
+    print("✓ Sesión de autenticación detenida (si estaba activa).")
 
 
 def _delete_account(runtime: Runtime) -> None:

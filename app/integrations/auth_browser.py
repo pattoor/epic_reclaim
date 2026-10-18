@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable
@@ -119,17 +120,47 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
         return f"https://www.epicgames.com/id/login?redirectUrl={quote(self._store_url(), safe='')}"
 
 
+def _visible_control(page, role: str, patterns: tuple[str, ...]) -> bool:
+    for pattern in patterns:
+        try:
+            locator = page.get_by_role(role, name=re.compile(pattern, re.IGNORECASE))
+            if locator.first.is_visible(timeout=800):
+                return True
+        except Exception:
+            continue
+    return False
+
+
 def _is_logged_in(page) -> bool:
-    try:
-        return page.get_by_role("button", name="Sign Out").is_visible(timeout=2000)
-    except Exception:
+    # Locale-aware: Epic serves store/id pages in the locale resolved per IP,
+    # so both English and Spanish controls count.
+    if _visible_control(page, "button", _SIGN_OUT_PATTERNS) or _visible_control(page, "link", _SIGN_OUT_PATTERNS):
+        return True
+    if "/login" in page.url.lower():
         return False
+    body = page.inner_text("body").lower()
+    if any(marker in body for marker in _SIGN_OUT_MARKERS):
+        return True
+    if _intervention_kind(body):
+        return False
+    if _visible_control(page, "link", _SIGN_IN_PATTERNS) or _visible_control(page, "button", _SIGN_IN_PATTERNS):
+        return False
+    if any(marker in body for marker in _SIGN_IN_MARKERS):
+        return False
+    return "epicgames.com" in page.url
+
+
+_SIGN_OUT_PATTERNS = ("sign out", "cerrar sesi[oó]n")
+_SIGN_OUT_MARKERS = ("sign out", "cerrar sesi[oó]n")
+_SIGN_IN_PATTERNS = ("sign in", "iniciar sesi[oó]n", "log in")
+_SIGN_IN_MARKERS = ("sign in", "iniciar sesi[oó]n")
 
 
 def _intervention_kind(body: str) -> str | None:
-    if "captcha" in body or "verify you are human" in body:
+    lowered = body.lower()
+    if "captcha" in lowered or "verify you are human" in lowered:
         return "captcha"
-    if "mfa" in body or "two-factor" in body or "verification code" in body:
+    if "mfa" in lowered or "two-factor" in lowered or "verification code" in lowered:
         return "mfa"
     return None
 

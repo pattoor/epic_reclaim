@@ -127,3 +127,14 @@ login vuelve al home de la store donde corre la sonda de éxito existente.
 Verificado en g7 con la pantalla remota: el formulario "Sign in to Epic Games"
 se renderiza sin desafío. El desafío anti-bot sigue clasificado como
 intervención (D8): el usuario lo completa a mano, nunca se evade.
+
+## 2026-10-18 (noche II) — Helper local_login.py para el fallback manual (SPECS 15)
+
+El login via noVNC quedo bloqueado en la verificacion humana de Google en el
+Chromium remoto. Se implemento el fallback documentado: `tools/local_login.py`
+abre un Chrome **con perfil dedicado persistente** (default) o aislado (`--fresh`)
+en la PC del usuario; luego el perfil se copia al volumen del server y la
+deteccion de sesion activa completa la autenticacion. La deteccion de login en
+`auth_browser.py` ahora reconoce controles en espanol e ingles y la store ya
+logueada. Nunca se usa el perfil diario del usuario (expondria sesiones
+no relacionadas al copiar).

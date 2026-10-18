@@ -249,6 +249,20 @@ CAPTCHA, MFA, autenticacion expirada, rate limits y bloqueos no se resuelven ni 
 
 Una vez resuelto el problema desde el dashboard, la cuenta vuelve a `active` y puede continuar el trabajo pendiente de forma segura. Telegram puede avisar de estas situaciones, pero no es necesario para resolverlas.
 
+### Fallback manual: login en la PC y copia del perfil (SPECS 15)
+
+Si la pantalla remota no permite completar el login (por ejemplo, un desafio anti-bot imposible en un Chromium remoto), se puede incluir el login en una PC grafica y copiar el perfil al servidor:
+
+1. En la PC con GUI: `py tools/local_login.py` abre Chrome con un **perfil dedicado persistente** (`%LOCALAPPDATA%\epic_reclaim\local_auth_profile`) en la pagina de login de Epic. Las cuentas de Google/Epic quedan enlazadas dentro de ese perfil para reusos futuros.
+   - `--profile-dir <ruta>` — usar otro perfil ya existente.
+   - `--fresh` — borrar el perfil dedicado antes (caso login aislado/limpio).
+2. Loguearse normalmente y terminar Chrome.
+3. Copiar el perfil al volumen del servidor (ejecucion explicita del usuario; via scp/Tailscale, cookies de solo el perfil dedicado):
+   `scp -r %LOCALAPPDATA%\epic_reclaim\local_auth_profile <server>:<sesiones>/<id>` y dejarlo como `<data>/sessions/<id>`.
+4. En el server disparar `authenticate`: detecta la sesion activa del perfil y deja la cuenta `active`.
+
+Nunca usar el perfil diario de Chrome del usuario: la copia al servidor expondria sesiones no relacionadas (mail, banca, etc.).
+
 ## Backup y restore
 
 Backup y export de historial se hacen desde el dashboard o la API:

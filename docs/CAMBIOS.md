@@ -116,3 +116,14 @@ Cambios (commit `0b4b068`):
   (banner 3.8 + challenge/response DES con el password de la sesión vía `openssl`).
 - No se fuerza `-BlacklistThreshold 0`; queda el default de TigerVNC.
 - Tests actualizados (`test_remote_screen.py`); suite 131/131.
+
+## 2026-10-18 (noche) — Auth: abrir /id/login directo en vez de la portada
+
+El intento real quedaba atascado en el desafío "verify you are human" de la
+portada de la store (nunca llegaba a la página de login). `PlaywrightAuthBrowser`
+ahora abre `www.epicgames.com/id/login?redirectUrl=<store base>` directamente:
+es la página real de login, sin el muro anti-bot de la storefront, y tras el
+login vuelve al home de la store donde corre la sonda de éxito existente.
+Verificado en g7 con la pantalla remota: el formulario "Sign in to Epic Games"
+se renderiza sin desafío. El desafío anti-bot sigue clasificado como
+intervención (D8): el usuario lo completa a mano, nunca se evade.

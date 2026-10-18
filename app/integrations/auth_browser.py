@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable
+from urllib.parse import quote
 
 from app.integrations.profile_locks import clear_stale_profile_locks
 
@@ -34,8 +35,8 @@ class InteractiveAuthBrowser(ABC):
 class PlaywrightAuthBrowser(InteractiveAuthBrowser):
     """Headed Chromium used only for the interactive login session.
 
-    The browser targets the Epic store landing page of the configured store
-    locale (empty locale => let Epic's IP-based region resolution apply).
+    The browser opens Epic's real login page (/id/login) and, once the user
+    completes it, lands back on the store home of the configured locale.
     """
 
     def __init__(self, locale: str = ""):
@@ -73,9 +74,11 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
                 )
                 try:
                     page = browser.pages[0] if browser.pages else browser.new_page()
-                    page.goto(self._store_url(), timeout=30000)
-                    if "Sign In" in page.inner_text("body"):
-                        page.goto(self._login_url(), timeout=30000)
+                    # Id/login (the real Epic auth page) instead of the
+                    # storefront: store pages sit behind the anti-bot wall and
+                    # that challenge loops forever on a fresh profile, while
+                    # the login page lets the user complete it manually.
+                    page.goto(self._login_url(), timeout=30000)
 
                     deadline = time.monotonic() + timeout_seconds
                     while time.monotonic() < deadline:
@@ -109,7 +112,11 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
         return f"{self._base()}/"
 
     def _login_url(self) -> str:
-        return f"{self._base()}/login"
+        # /id/login is the real authentication page (no storefront anti-bot
+        # wall); redirectUrl sends the browser back to the store home after
+        # the user logs in, which is also where the success probe looks for
+        # the Sign Out control.
+        return f"https://www.epicgames.com/id/login?redirectUrl={quote(self._store_url(), safe='')}"
 
 
 def _is_logged_in(page) -> bool:

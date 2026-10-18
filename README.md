@@ -2,18 +2,45 @@
 
 Aplicacion self-hosted para detectar y reclamar automaticamente los juegos actualmente gratuitos de la seccion oficial **Free Games** de Epic Games Store para una o mas cuentas configuradas.
 
-El proyecto terminado esta pensado para un servidor domestico Linux/Debian, con acceso por LAN o Tailscale. Funciona sin n8n y sin Telegram; ambas integraciones son opcionales.
+> **Fuente de verdad del proyecto:** `docs/` (ver [`docs/INDEX.md`](docs/INDEX.md)). Este README solo cubre uso/instalacion rapida.
+
+## Interfaz principal
+
+La administracion se hace por **CLI de consola** (menus numerados, solo stdlib), pensada para SSH:
+
+```text
+docker compose exec epic-reclaim python -m app.cli
+```
+
+o, en desarrollo local:
+
+```text
+python -m app.cli
+```
+
+El modo web (FastAPI + dashboard + API + scheduler) es opcional (`python -m app.web` / `main.py` historico) para quien prefiera el dashboard o integraciones externas (n8n, curl).
+
+## Como funciona
+
+1. Se agrega la(s) cuenta(s) Epic por CLI.
+2. `Authenticate` imprime una URL de un solo uso (`http://<ip-g7>:<NOVNC_PORT>`) para completar el login/MFA/CAPTCHA desde el navegador de tu PC; el browser corre en el contenedor del servidor y la sesion queda guardada alla (volumen `sessions`).
+3. El scheduler interno ejecuta el workflow unico por cron simplificado: por defecto **jueves 14:05**, configurable (dias + horas, preset "diario" para temporadas como navidad).
+4. Cada run: descubre los juegos gratuitos vigentes (locale configurable `LOCALE`, default por IP), procesa cuentas en orden, verifica ownership y reclama secuencialmente guardando historial completo.
+
+El proyecto terminado esta pensado para un servidor domestico Linux/Debian (referencia: g7, 2 cores / ~2.5 GB disponibles), con acceso por LAN o Tailscale. Funciona sin n8n y sin Telegram; ambas integraciones son opcionales.
 
 ## Caracteristicas
 
+- Interfaz principal por consola (CLI stdlib) y dashboard web opcional servido por FastAPI.
 - Descubrimiento de cualquier cantidad de juegos gratis elegibles en cada ejecucion.
 - Soporte para multiples cuentas Epic sin contrasenas almacenadas por la aplicacion.
 - Perfiles de navegador Playwright persistentes por cuenta.
-- Autenticacion y reautenticacion interactiva en el navegador del servidor.
+- Autenticacion interactiva remota: el browser corre en el servidor y el usuario completa login/MFA/CAPTCHA desde la URL de un solo uso en su PC.
 - Deteccion de CAPTCHA, MFA, expiracion de sesion y bloqueos que requieren intervencion humana.
 - Claims secuenciales, idempotentes y con resultados `claimed`, `already_owned`, `failed` o `skipped`.
 - Reintentos limitados para fallos transitorios, con backoff y delays configurables.
-- Dashboard web para cuentas, ejecuciones, historial, configuracion y diagnostico.
+- Scheduler interno por dia y hora (default jueves 14:05; preset diario para temporadas promocionales).
+- Dashboard web para cuentas, ejecuciones, historial, configuracion y diagnostico (opcional).
 - `Run now`, scheduler interno y `POST /api/runs` para triggers externos.
 - Exportacion CSV/JSON de historial por cuenta.
 - Backup e importacion de datos sin incluir sesiones/cookies por defecto.
@@ -22,11 +49,13 @@ El proyecto terminado esta pensado para un servidor domestico Linux/Debian, con 
 
 ## Como luce el proyecto terminado
 
-Al abrir el dashboard, el usuario encuentra una vista compacta con el estado de la aplicacion, la salud de SQLite y Playwright, el estado del scheduler, la proxima ejecucion, el resultado de la ultima ejecucion y las cuentas que necesitan atencion.
+Como luce el proyecto terminado:
 
-La seccion **Accounts** muestra cada cuenta con su nombre, orden de procesamiento y estado. Desde alli se puede agregar una cuenta, abrir la autenticacion remota, reautenticarla, activarla o desactivarla, resolver una intervencion y eliminarla con confirmacion explicita.
+Al abrir la CLI, el usuario ves un estado compacto con la salud de SQLite y Playwright, el estado del scheduler, la proxima ejecucion, el resultado de la ultima ejecucion y las cuentas que necesitan atencion, con menus numerados para todas las operaciones.
 
-La seccion **Execution** presenta el progreso de una ejecucion sin recargar la pagina:
+La seccion **Accounts** muestra cada cuenta con su nombre, orden de procesamiento y estado. Desde alli se puede agregar una cuenta, iniciar la autenticacion remota (URL de un solo uso), reautenticarla, activarla o desactivarla, resolver una intervencion y eliminarla con confirmacion explicita.
+
+La seccion **Execution** presenta el progreso de una ejecucion en consola (o en el dashboard opcional) sin recargar ni refrescar manualmente:
 
 ```text
 RUN #142
@@ -86,7 +115,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. La autenticacion remota se sirve a traves del mismo puerto `8765` mediante un proxy interno, por lo que no es necesario exponer el puerto `6080` fuera del contenedor.
+Abrir `http://<IP_DEL_SERVIDOR>:8765` desde la red local o la direccion Tailscale del servidor. La pantalla remota de autenticacion (noVNC) se publica standalone en `NOVNC_PORT` (default 6080) y solo esta activa mientras haya una sesion de autenticacion en curso.
 
 Los volumenes conservan:
 
@@ -106,7 +135,7 @@ docker compose up -d --build   # reconstruir tras cambios
 
 ### Autenticacion interactiva con noVNC
 
-La imagen instala Xvfb, x11vnc, websockify y el cliente web noVNC. Al iniciar **Authenticate** desde el dashboard, la aplicacion abre una pestaña nueva con noVNC servido por el mismo puerto `8765` a traves de un proxy interno. El navegador remoto corre en `g7-server`; el usuario completa login, MFA o CAPTCHA manualmente desde esa pestaña. Una vez detectado el inicio de sesion, el servidor detiene noVNC, cierra el navegador y conserva unicamente el perfil persistente de Playwright. No se exponen cookies, CDP ni credenciales. Si la pantalla remota no esta disponible, el endpoint devuelve 503 y `/health` reporta `remote_screen: unavailable` junto con el diagnostico.
+La imagen instala Xvfb, x11vnc, websockify y el cliente web noVNC, ejecutados como **procesos standalone** (no proxied por la app). Al iniciar **Authenticate** desde la CLI, esta imprime la URL directa `http://<PUBLIC_HOST>:<NOVNC_PORT>/vnc.html?...` (token de un solo uso + contrasena efimera para VNC). El navegador remoto corre en `g7-server`; el usuario completa login, MFA o CAPTCHA manualmente desde su PC. Una vez detectado el inicio de sesion, el servidor detiene noVNC, cierra el navegador y conserva unicamente el perfil persistente de Playwright. No se exponen cookies, CDP ni credenciales. Si la pantalla remota no esta disponible, el comando lo informa y `/health` reporta `remote_screen: unavailable` junto con el diagnostico.
 
 ## Ejecucion sin Docker
 
@@ -130,11 +159,15 @@ Variables soportadas (ver `.env.example`):
 APP_HOST=0.0.0.0
 APP_PORT=8765
 NOVNC_PORT=6080
+PUBLIC_HOST=
 DATABASE_PATH=./data/database/epic.db
 SESSIONS_PATH=./data/sessions
 STATE_PATH=./data/state
+LOCALE=es-AR
 SCHEDULER_ENABLED=true
-SCHEDULER_INTERVAL_SECONDS=21600
+SCHEDULER_DAYS=THU
+SCHEDULER_TIMES=14:05
+SCHEDULER_DAILY=false
 CLAIM_DELAY_MIN_SECONDS=2
 CLAIM_DELAY_MAX_SECONDS=5
 MAX_RETRY_ATTEMPTS=3
@@ -145,9 +178,11 @@ EXTERNAL_API_KEY_ENABLED=false
 EXTERNAL_API_KEY=
 ```
 
+`LOCALE` fija la region del store (default: region por IP del servidor). `PUBLIC_HOST` es la IP/nombre con el que la CLI arma la URL de la pantalla remota (IP LAN o Tailscale del g7). El scheduler se configura por dias de semana y horas desde la CLI/API (los valores en env son simplemente el default inicial).
+
 `.env` contiene configuracion local y secretos, por lo que debe permanecer ignorado por Git. La aplicacion nunca guarda contrasenas Epic como campos normales.
 
-Los delays y el intervalo del scheduler tambien pueden ajustarse desde el dashboard (**Settings**). El intervalo se configura como dias, horas, minutos y segundos; los cambios se guardan en la base y aplican sin reiniciar.
+Los delays y el scheduler tambien pueden ajustarse desde el dashboard (**Settings**): dias (MON..SUN), horarios (HH:MM, varios por coma) y preset "diario". Los cambios se guardan en la base y aplican sin reiniciar.
 
 ### Nota de seguridad
 
@@ -158,26 +193,25 @@ Los delays y el intervalo del scheduler tambien pueden ajustarse desde el dashbo
 
 ## Primer uso
 
-1. Iniciar la aplicacion y abrir el dashboard.
-2. Agregar una cuenta Epic.
-3. Iniciar **Authenticate**.
-4. Abrir el navegador interactivo remoto que ejecuta el servidor.
-5. Completar manualmente login, MFA o CAPTCHA si Epic los solicita.
-6. Esperar la confirmacion de autenticacion y el cierre del navegador.
-7. Ajustar nombre, orden, estado y scheduler de la cuenta.
-8. Ejecutar **Run now** para validar el flujo.
+1. Ejecutar la CLI: `python -m app.cli` (dev local) o `docker compose exec epic-reclaim python -m app.cli` (g7).
+2. **Add account**: agregar la cuenta Epic (nombre y orden de procesamiento).
+3. **Authenticate**: la CLI imprime la URL del navegador remoto (noVNC) con token de un solo uso.
+4. Abrir la URL desde la PC o celular (LAN o Tailscale) y completar login, RFA o CAPTCHA manualmente.
+5. Al confirmar, el servidor guarda la sesion y cierra pantalla y navegador.
+6. Ajustar scheduler (dias + hora; default jueves 14:05) y delays desde Settings.
+7. Ejecutar **Run now** para validar el flujo completo.
 
 Las cuentas se procesan en orden y los juegos uno por uno. Si un juego ya pertenece a la cuenta, se registra `already_owned`; si Epic confirma que se agrego, se registra `claimed`.
 
 ## Scheduler y API externa
 
-El scheduler es **interno**: un bucle `asyncio` dentro del mismo proceso FastAPI que ejecuta `RunWorkflow.run("scheduler")` en el intervalo configurado. No requiere n8n, cron ni ningun otro sistema externo para funcionar.
+El scheduler es **interno y tipo cron simplificado**: un bucle `asyncio` dentro del mismo runner que ejecuta `RunWorkflow.run("scheduler")` en los dias/horas configurados (por defecto jueves 14:05), con preset "diario" para temporadas promocionales. No requiere n8n, cron de sistema ni ningun otro orquestador para funcionar.
 
-Desde **Settings** puedes activar o desactivar el scheduler y establecer el intervalo en dias, horas, minutos y segundos. El valor por defecto es 6 horas. El scheduler nunca inicia una segunda ejecucion mientras otra siga activa.
+Desde **Settings** (CLI o dashboard) puedes activar/desactivar el scheduler, elegir dias de la semana y horarios. Los cambios se guardan en la base y aplican sin reiniciar. El scheduler nunca inicia una segunda ejecucion mientras otra siga activa.
 
 Triggers de ejecucion (todos usan el mismo workflow):
 
-- **Scheduler interno** — ejecuta automaticamente `RunWorkflow.run("scheduler")` segun el intervalo configurado.
+- **Scheduler interno** — ejecuta automaticamente `RunWorkflow.run("scheduler")` en los dias y horarios configurados.
 - **`Run now`** en el dashboard — llama a `POST /api/runs/manual` y no requiere API key.
 - **`POST /api/runs`** — trigger externo para n8n, cron, scripts u otro orquestador. Si `EXTERNAL_API_KEY_ENABLED=true`, exige el header `X-API-Key`.
 

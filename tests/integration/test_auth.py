@@ -59,7 +59,7 @@ def test_auth_success_activates_account(tmp_path):
     )
     session = auth.start(account.id)
     assert session.status == "running"
-    assert session.screen_url.startswith("/api/remote-screen/")
+    assert session.screen_url.startswith("http://127.0.0.1:6080/vnc.html?")
 
     _wait(lambda: session.status != "running")
     assert session.status == "completed"

@@ -1,5 +1,7 @@
 # Cambios recientes - Autenticación remota
 
+> **Estado 2026-10-18:** el pipeline antiguo (proxy noVNC dentro de FastAPI) queda **descartado**. La re-arquitectura adoptada (noVNC standalone + CLI) está definida en `docs/DECISIONS.md` (D3) y el plan en `docs/ROADMAP.md` (R3). Este archivo conserva el historial del diseño previo solo como referencia de diagnosticación; ya no define dirección del proyecto.
+
 ## Estado
 La autenticación interactiva aún no funciona en producción. Se acumulan problemas en el pipeline noVNC → proxy interno → navegador cliente.
 

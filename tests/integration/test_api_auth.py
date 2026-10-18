@@ -45,7 +45,10 @@ def test_authenticate_creates_account_and_endpoint(tmp_path):
         data = response.json()
         assert data["token"] != ""
         assert data["screen_url"] is not None
-        assert data["screen_url"].startswith("/api/remote-screen/")
+        # One-use screen URL served by the standalone noVNC stack: ephemeral
+        # password, direct to the websockify port, no in-app proxy involved.
+        assert data["screen_url"].startswith("http://127.0.0.1:6080/vnc.html?")
+        assert "password=" in data["screen_url"]
 
         status = client.get(f"/api/auth/{data['token']}")
         assert status.status_code == 200
@@ -55,22 +58,18 @@ def test_authenticate_creates_account_and_endpoint(tmp_path):
         assert revoked.status_code == 200
 
 
-def test_remote_screen_proxy_returns_404_for_unknown_token(tmp_path):
-    app = _make_app(tmp_path)
-    with TestClient(app) as client:
-        response = client.get("/api/remote-screen/unknown-token")
-    assert response.status_code == 404
-
-
-def test_remote_screen_proxy_uses_response_not_streaming(tmp_path):
+def test_authenticate_uses_ephemeral_password_per_session(tmp_path):
     app = _make_app(tmp_path, screen=FakeScreen(available=True))
     with TestClient(app) as client:
         account_id = _create_account(app)
-        response = client.post(f"/api/accounts/{account_id}/authenticate")
-        data = response.json()
-        screen = client.get(data["screen_url"])
-        assert screen.status_code == 200
-        assert "transfer-encoding" not in screen.headers
+        first = client.post(f"/api/accounts/{account_id}/authenticate").json()
+        second = client.post(f"/api/accounts/{account_id}/authenticate")
+        # A second concurrent flow is rejected while the first is running.
+        assert second.status_code == 200
+        data = second.json()
+        assert data["status"] == "failed"
+        assert data["token"] == ""
+        assert data["screen_url"] is None
 
 
 def test_authenticate_unknown_account_404(tmp_path):

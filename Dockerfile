@@ -4,6 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     APP_HOST=0.0.0.0 \
     APP_PORT=8765 \
+    NOVNC_PORT=6080 \
+    NOVNC_WS_PORT=6080 \
+    NOVNC_VNC_PORT=5900 \
     DATABASE_PATH=/app/data/database/epic.db \
     SESSIONS_PATH=/app/data/sessions \
     STATE_PATH=/app/data/state
@@ -23,7 +26,7 @@ COPY app ./app
 
 RUN mkdir -p /app/data/database /app/data/sessions /app/data/state
 
-EXPOSE 8765
+EXPOSE 8765 6080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health')"

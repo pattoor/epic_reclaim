@@ -25,19 +25,33 @@ class AccountUpdate(BaseModel):
 
 class SettingsUpdate(BaseModel):
     scheduler_enabled: bool | None = None
-    scheduler_interval_seconds: int | None = None
+    scheduler_days: str | None = None
+    scheduler_times: str | None = None
+    scheduler_daily: bool | None = None
     claim_delay_min_seconds: float | None = None
     claim_delay_max_seconds: float | None = None
     telegram_enabled: bool | None = None
 
 
 def _validate_settings_update(request: Request, updates: dict) -> None:
+    from app.domain import scheduling
+
     with _db(request).connect() as connection:
         effective = _settings_service(request).load(connection)
 
-    interval = updates.get("scheduler_interval_seconds", effective.scheduler_interval_seconds)
-    if interval < 1:
-        raise HTTPException(status_code=422, detail="scheduler_interval_seconds must be >= 1")
+    days = updates.get("scheduler_days", effective.scheduler_days)
+    times = updates.get("scheduler_times", effective.scheduler_times)
+    daily = updates.get("scheduler_daily", effective.scheduler_daily)
+    try:
+        scheduling.normalize_days(days)
+        scheduling.normalize_times(times)
+    except scheduling.ScheduleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    if not scheduling.build_slots(days, times, daily=daily):
+        raise HTTPException(
+            status_code=422,
+            detail="schedule must contain at least one valid day and time",
+        )
 
     delay_min = updates.get("claim_delay_min_seconds", effective.claim_delay_min_seconds)
     delay_max = updates.get("claim_delay_max_seconds", effective.claim_delay_max_seconds)
@@ -428,7 +442,9 @@ async def upload_backup(request: Request, overwrite: bool = False):
 
 _EDITABLE_KEYS = {
     "scheduler_enabled",
-    "scheduler_interval_seconds",
+    "scheduler_days",
+    "scheduler_times",
+    "scheduler_daily",
     "claim_delay_min_seconds",
     "claim_delay_max_seconds",
     "telegram_enabled",
@@ -437,17 +453,17 @@ _EDITABLE_KEYS = {
 
 @router.get("/settings")
 def get_settings(request: Request):
-    settings = request.app.state.settings
     with _db(request).connect() as connection:
         effective = _settings_service(request).load(connection)
     return {
         "scheduler_enabled": effective.scheduler_enabled,
-        "scheduler_interval_seconds": effective.scheduler_interval_seconds,
+        "scheduler_days": effective.scheduler_days,
+        "scheduler_times": effective.scheduler_times,
+        "scheduler_daily": effective.scheduler_daily,
         "claim_delay_min_seconds": effective.claim_delay_min_seconds,
         "claim_delay_max_seconds": effective.claim_delay_max_seconds,
         "max_retry_attempts": effective.max_retry_attempts,
         "telegram_enabled": effective.telegram_enabled,
-        "app_port": settings.app_port,
         "next_run_at": getattr(request.app.state.scheduler, "next_run_at", None),
     }
 
@@ -456,7 +472,9 @@ def get_settings(request: Request):
 def update_settings(body: SettingsUpdate, request: Request):
     updates = {
         "scheduler_enabled": body.scheduler_enabled,
-        "scheduler_interval_seconds": body.scheduler_interval_seconds,
+        "scheduler_days": body.scheduler_days,
+        "scheduler_times": body.scheduler_times,
+        "scheduler_daily": body.scheduler_daily,
         "claim_delay_min_seconds": body.claim_delay_min_seconds,
         "claim_delay_max_seconds": body.claim_delay_max_seconds,
         "telegram_enabled": body.telegram_enabled,
@@ -468,7 +486,9 @@ def update_settings(body: SettingsUpdate, request: Request):
         effective = _settings_service(request).load(connection)
     return {
         "scheduler_enabled": effective.scheduler_enabled,
-        "scheduler_interval_seconds": effective.scheduler_interval_seconds,
+        "scheduler_days": effective.scheduler_days,
+        "scheduler_times": effective.scheduler_times,
+        "scheduler_daily": effective.scheduler_daily,
         "claim_delay_min_seconds": effective.claim_delay_min_seconds,
         "claim_delay_max_seconds": effective.claim_delay_max_seconds,
         "telegram_enabled": effective.telegram_enabled,

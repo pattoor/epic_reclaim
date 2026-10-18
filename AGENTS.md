@@ -1,15 +1,18 @@
 # Reglas Operativas para Agentes
 
-Este archivo define cómo implementar y verificar cambios en el proyecto. No reemplaza los documentos de diseño:
+Este archivo define cómo implementar y verificar cambios en el proyecto. La **fuente de verdad de diseño vive en `docs/`** (ver `docs/INDEX.md`); este archivo solo aclara puntos operativos:
 
-- `SPECS.md`: requisitos, límites y Definition of Done.
-- `ARCHITECTURE.md`: módulos, interfaces, estados y flujo técnico.
-- `CODESTYLE.md`: convenciones de código, nombres, comentarios y tests.
-- `ROADMAP.md`: orden de milestones y criterios de salida.
+- `docs/SPECS.md`: requisitos, límites y Definition of Done.
+- `docs/DECISIONS.md`: decisiones adjudicadas y su justificación (append-only).
+- `docs/ARCHITECTURE.md`: módulos, interfaces, estados y flujo técnico.
+- `docs/CODESTYLE.md`: convenciones de código, nombres, comentarios y tests.
+- `docs/ROADMAP.md`: orden de fases (R1–R7) y criterios de salida.
+
+Puntos de interfaz vigentes: CLI consola como interfaz principal (`app/cli.py`, stdlib); FastAPI/dashboard opcionales; scheduler por día+hora (default `THU 14:05`); pantalla remota noVNC standalone solo durante autenticación.
 
 ## Antes de modificar
 
-- Leer el milestone activo de `ROADMAP.md` y el apartado relevante de `ARCHITECTURE.md`.
+- Leer la fase activa de `docs/ROADMAP.md` y el apartado relevante de `docs/ARCHITECTURE.md`.
 - Confirmar que el cambio satisface un requisito existente; no introducir funcionalidades por interés técnico.
 - Revisar el estado del repositorio y conservar cambios ajenos.
 - Mantener los cambios enfocados. No reformatear ni reorganizar archivos no relacionados.
@@ -17,9 +20,9 @@ Este archivo define cómo implementar y verificar cambios en el proyecto. No ree
 
 ## Orden de implementación
 
-- Respetar la secuencia de milestones de `ROADMAP.md`.
+- Respetar la secuencia de fases de `docs/ROADMAP.md`.
 - No construir la UI para compensar reglas de negocio ausentes en backend.
-- Implementar primero dominio, persistencia y servicios; después API, frontend e integraciones.
+- Implementar primero dominio, persistencia y servicios; después CLI, API, frontend e integraciones.
 - Hacer que scheduler, `Run now` y API externa llamen al mismo `RunWorkflow.run(trigger)`.
 - Mantener `EpicAdapter` sustituible por un fake desde el primer uso.
 - No avanzar un milestone sin cumplir su criterio de salida y sus tests.
@@ -30,7 +33,7 @@ Este archivo define cómo implementar y verificar cambios en el proyecto. No ree
 - No incluir sesiones/cookies en exports ni backups normales.
 - No resolver, evadir ni reintentar automáticamente CAPTCHA, MFA, rate limits, bloqueos o desafíos anti-bot.
 - Pausar o marcar la cuenta para intervención cuando el adaptador indique una condición de seguridad.
-- Mantener el dashboard orientado a LAN/Tailscale; no asumir exposición pública.
+- Mantener CLI, dashboard y pantalla remota (noVNC) orientados a LAN/Tailscale; no asumir exposición pública.
 - Tratar Telegram, n8n y cualquier API key como integraciones opcionales.
 - Validar y confirmar explícitamente eliminaciones permanentes e imports que puedan sobrescribir datos.
 
@@ -68,12 +71,12 @@ Este archivo define cómo implementar y verificar cambios en el proyecto. No ree
 
 ## Cambios documentales y configuración
 
-- Actualizar `README.md` si cambia instalación, configuración, despliegue o troubleshooting.
-- Actualizar `ARCHITECTURE.md` si cambia una frontera, interfaz, estado o decisión técnica.
-- Actualizar `ROADMAP.md` solo al completar o reordenar trabajo real, no para ocultar tareas pendientes.
+- Actualizar `README.md` (raíz) si cambia instalación, configuración, despliegue o troubleshooting.
+- Actualizar `docs/ARCHITECTURE.md` (y `docs/DECISIONS.md` si hay decisión nueva) si cambia una frontera, interfaz, estado o decisión técnica.
+- Actualizar `docs/ROADMAP.md` solo al completar o reordenar trabajo real, no para ocultar tareas pendientes.
 - Mantener `.env.example` sin secretos y sincronizado con las variables soportadas.
-- No editar `SPECS.md` para hacer que una implementación incumplida parezca válida.
-- Mantener comentarios breves; explicar únicamente decisiones no obvias, invariantes o límites de seguridad. Para el detalle de estilo, consultar `CODESTYLE.md`.
+- No editar `docs/SPECS.md` para hacer que una implementación incumplida parezca válida.
+- Mantener comentarios breves; explicar únicamente decisiones no obvias, invariantes o límites de seguridad. Para el detalle de estilo, consultar `docs/CODESTYLE.md`.
 
 ## Cierre de una tarea
 

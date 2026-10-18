@@ -29,6 +29,18 @@ class InteractiveAuthBrowser(ABC):
 
 
 class PlaywrightAuthBrowser(InteractiveAuthBrowser):
+    """Headed Chromium used only for the interactive login session.
+
+    The browser targets the Epic store landing page of the configured store
+    locale (empty locale => let Epic's IP-based region resolution apply).
+    """
+
+    def __init__(self, locale: str = ""):
+        self._locale = (locale or "").strip()
+
+    def _base(self) -> str:
+        return f"https://store.epicgames.com/{self._locale}" if self._locale else "https://store.epicgames.com"
+
     def run_auth(
         self,
         profile_path: str,
@@ -56,9 +68,9 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
                 )
                 try:
                     page = browser.pages[0] if browser.pages else browser.new_page()
-                    page.goto("https://store.epicgames.com/en-US/", timeout=30000)
+                    page.goto(self._store_url(), timeout=30000)
                     if "Sign In" in page.inner_text("body"):
-                        page.goto("https://store.epicgames.com/en-US/login", timeout=30000)
+                        page.goto(self._login_url(), timeout=30000)
 
                     deadline = time.monotonic() + timeout_seconds
                     while time.monotonic() < deadline:
@@ -85,6 +97,12 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
                     browser.close()
         except TimeoutError:
             return AuthOutcome(success=False, error="auth timeout")
+
+    def _store_url(self) -> str:
+        return f"{self._base()}/"
+
+    def _login_url(self) -> str:
+        return f"{self._base()}/login"
 
 
 def _is_logged_in(page) -> bool:

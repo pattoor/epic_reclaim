@@ -8,6 +8,9 @@ services:
       - .env
     ports:
       - "${APP_PORT:-8765}:8765"
+      # Standalone noVNC screen: only active while an authentication session
+      # is running (processes start/stop at runtime inside the container).
+      - "${NOVNC_PORT:-6080}:6080"
     volumes:
       - database:/app/data/database
       - sessions:/app/data/sessions
@@ -16,6 +19,7 @@ services:
       - DATABASE_PATH=/app/data/database/epic.db
       - SESSIONS_PATH=/app/data/sessions
       - STATE_PATH=/app/data/state
+      - NOVNC_PORT=6080
 
 volumes:
   database:

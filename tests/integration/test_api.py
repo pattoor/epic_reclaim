@@ -129,28 +129,37 @@ def test_settings_get_and_patch(tmp_path):
     with TestClient(app) as client:
         settings = client.get("/api/settings")
         assert settings.status_code == 200
-        assert settings.json()["scheduler_interval_seconds"] == 21600
+        assert settings.json()["scheduler_days"] == "THU"
+        assert settings.json()["scheduler_times"] == "14:05"
 
-        patched = client.patch("/api/settings", json={"scheduler_interval_seconds": 7200})
+        patched = client.patch(
+            "/api/settings",
+            json={"scheduler_days": "THU,TUE", "scheduler_times": "14:05,19:30"},
+        )
         assert patched.status_code == 200
-        assert patched.json()["scheduler_interval_seconds"] == 7200
+        assert patched.json()["scheduler_days"] == "THU,TUE"
+        assert patched.json()["scheduler_times"] == "14:05,19:30"
 
         settings = client.get("/api/settings")
-        assert settings.json()["scheduler_interval_seconds"] == 7200
+        assert settings.json()["scheduler_days"] == "THU,TUE"
 
 
-def test_settings_interval_is_preserved_as_seconds(tmp_path):
+def test_settings_daily_preset(tmp_path):
     app = _make_app(tmp_path)
     with TestClient(app) as client:
-        response = client.patch("/api/settings", json={"scheduler_interval_seconds": 3661})
-        assert response.status_code == 200
-        assert response.json()["scheduler_interval_seconds"] == 3661
+        patched = client.patch(
+            "/api/settings",
+            json={"scheduler_daily": True, "scheduler_times": "14:05"},
+        )
+        assert patched.status_code == 200
+        assert patched.json()["scheduler_daily"] is True
 
 
-def test_settings_reject_invalid_intervals_and_delays(tmp_path):
+def test_settings_reject_invalid_schedules_and_delays(tmp_path):
     app = _make_app(tmp_path)
     with TestClient(app) as client:
-        assert client.patch("/api/settings", json={"scheduler_interval_seconds": 0}).status_code == 422
+        assert client.patch("/api/settings", json={"scheduler_days": "NOTADAY"}).status_code == 422
+        assert client.patch("/api/settings", json={"scheduler_times": "25:00"}).status_code == 422
         assert client.patch("/api/settings", json={"claim_delay_min_seconds": -1}).status_code == 422
         assert (
             client.patch(

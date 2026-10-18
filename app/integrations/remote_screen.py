@@ -5,6 +5,7 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
@@ -29,10 +30,36 @@ class RemoteScreen(ABC):
         pass
 
     @abstractmethod
-    def screen_url(self, token: str | None = None) -> str | None:
+    def screen_url(self, token: str | None = None, password: str | None = None) -> str | None:
         pass
 
     @abstractmethod
+    def stop(self) -> None:
+        pass
+
+
+class LocalHeadedScreen(RemoteScreen):
+    """No remote screen: the headed browser shows on the local machine.
+
+    Used on GUI development machines (e.g. Windows) where the user watches
+    the Chromium window directly and no VNC layer is needed.
+    """
+
+    ws_port = 0
+
+    def available(self) -> bool:
+        return True
+
+    def diagnostics(self) -> dict:
+        return {"mode": "local-headed", "tools": {}, "running": False}
+
+    def start(self, password: str) -> str:
+        # Empty string is truthy-checked via `is None` in auth service.
+        return ""
+
+    def screen_url(self, token: str | None = None, password: str | None = None) -> None:
+        return None
+
     def stop(self) -> None:
         pass
 
@@ -41,8 +68,9 @@ class NoVNCProvider(RemoteScreen):
     """Runs Xvfb + x11vnc + websockify to expose a headed browser via noVNC.
 
     VNC is protected with a per-session password (never -nopw). websockify
-    serves the noVNC web client from NOVNC_WEB_DIR (or the system path) so the
-    dashboard can embed the remote browser page.
+    serves the noVNC web client from NOVNC_WEB_DIR (or the system path) and
+    the stack runs standalone: the client connects directly to the published
+    websockify port, never through a proxy inside this application.
     """
 
     def __init__(
@@ -51,6 +79,7 @@ class NoVNCProvider(RemoteScreen):
         vnc_port: int = 5900,
         ws_port: int = 6080,
         novnc_web_dir: str | None = None,
+        public_host: str = "",
         startup_timeout_seconds: float = 10.0,
         startup_poll_interval: float = 0.2,
     ):
@@ -58,6 +87,7 @@ class NoVNCProvider(RemoteScreen):
         self._vnc_port = vnc_port
         self._ws_port = ws_port
         self._novnc_web_dir = novnc_web_dir or "/usr/share/novnc"
+        self._public_host = (public_host or "").strip()
         self._startup_timeout_seconds = startup_timeout_seconds
         self._startup_poll_interval = startup_poll_interval
         self._processes: list[subprocess.Popen] = []
@@ -252,15 +282,26 @@ class NoVNCProvider(RemoteScreen):
             return f"noVNC web dir not found: {self._novnc_web_dir}"
         return "remote screen not available"
 
-    def screen_url(self, token: str | None = None) -> str | None:
+    def screen_url(self, token: str | None = None, password: str | None = None) -> str | None:
+        """Full URL for a one-use interactive session.
+
+        The token is informational ( Logs/identification only); the real gate
+        is the ephemeral VNC password which is regenerated per session and
+        bound to the started Xvfb+x11vnc pair. No cookies, CDP or the
+        persistent profile are ever exposed through this URL.
+        """
         if not self._processes:
             return None
         alive, error = self._check_processes_alive()
         if not alive:
             self._last_error = error
             return None
-        token = token or ""
-        return f"/api/remote-screen/{token}"
+        host = self._public_host or "127.0.0.1"
+        query = (
+            f"host={host}&port={self._ws_port}&password={password or ''}"
+            "&autoconnect=1&bell=off&show_dot=1"
+        )
+        return f"http://{host}:{self._ws_port}/vnc.html?{query}"
 
     def stop(self) -> None:
         for process in self._processes:
@@ -275,3 +316,21 @@ class NoVNCProvider(RemoteScreen):
             except FileNotFoundError:
                 pass
             self._passfile = None
+
+
+def create_default_screen(settings) -> RemoteScreen:
+    """Pick the remote-screen implementation fitting the environment.
+
+    Linux servers (the g7 Docker deployment) use the standalone Xvfb+noVNC
+    stack; GUI machines (Windows/macOS desktops) show the headed browser
+    locally instead, avoiding a VNC layer during development.
+    """
+    if sys.platform.startswith("win") or sys.platform == "darwin":
+        return LocalHeadedScreen()
+    if not os.environ.get("DISPLAY") and shutil.which("Xvfb") is not None:
+        # Headless Linux server: NoVNCProvider works fine without DISPLAY.
+        pass
+    return NoVNCProvider(
+        ws_port=settings.no_vnc_port,
+        public_host=settings.public_host,
+    )

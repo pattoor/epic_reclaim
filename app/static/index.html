@@ -126,21 +126,20 @@
         <div class="setting-row">
           <div class="setting-info">
             <span class="setting-title">Scheduler enabled</span>
-            <span class="setting-hint">Automatically run the claim workflow at the configured interval.</span>
+            <span class="setting-hint">Automatically run the claim workflow at the configured days/times.</span>
           </div>
           <button type="button" class="toggle" id="settings-scheduler-enabled" data-value="false">Disabled</button>
         </div>
 
         <div class="setting-row">
           <div class="setting-info">
-            <span class="setting-title">Scheduler interval</span>
-            <span class="setting-hint">Example: 0 days, 6 hours, 0 minutes, 0 seconds = every 6 hours.</span>
+            <span class="setting-title">Schedule (day + time)</span>
+            <span class="setting-hint">Days MON..SUN separated by commas; times HH:MM separated by commas. Example: THU @ 14:05.</span>
           </div>
           <div class="interval-inputs">
-            <label><input type="number" id="settings-interval-days" min="0" value="0"> days</label>
-            <label><input type="number" id="settings-interval-hours" min="0" max="23" value="6"> hours</label>
-            <label><input type="number" id="settings-interval-minutes" min="0" max="59" value="0"> minutes</label>
-            <label><input type="number" id="settings-interval-seconds" min="0" max="59" value="0"> seconds</label>
+            <label>days <input type="text" id="settings-scheduler-days" placeholder="THU"></label>
+            <label>times <input type="text" id="settings-scheduler-times" placeholder="14:05"></label>
+            <label>daily <input type="checkbox" id="settings-scheduler-daily"></label>
           </div>
         </div>
 

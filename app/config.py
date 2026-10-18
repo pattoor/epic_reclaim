@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.domain import scheduling
+
 
 def _bool(value: str | None, default: bool) -> bool:
     if value is None:
@@ -19,11 +21,16 @@ class ConfigError(ValueError):
 class Settings:
     app_host: str = "0.0.0.0"
     app_port: int = 8765
+    no_vnc_port: int = 6080
+    public_host: str = ""
+    locale: str = ""
     database_path: str = "./data/database/epic.db"
     sessions_path: str = "./data/sessions"
     state_path: str = "./data/state"
     scheduler_enabled: bool = True
-    scheduler_interval_seconds: int = 21600
+    scheduler_days: str = "THU"
+    scheduler_times: str = "14:05"
+    scheduler_daily: bool = False
     claim_delay_min_seconds: float = 2
     claim_delay_max_seconds: float = 5
     max_retry_attempts: int = 3
@@ -48,13 +55,16 @@ class Settings:
         settings = cls(
             app_host=get("APP_HOST", cls.app_host),
             app_port=int(get("APP_PORT", str(cls.app_port))),
+            no_vnc_port=int(get("NOVNC_PORT", str(cls.no_vnc_port))),
+            public_host=get("PUBLIC_HOST", cls.public_host),
+            locale=get("LOCALE", cls.locale),
             database_path=get("DATABASE_PATH", cls.database_path),
             sessions_path=get("SESSIONS_PATH", cls.sessions_path),
             state_path=get("STATE_PATH", cls.state_path),
             scheduler_enabled=boolean("SCHEDULER_ENABLED", cls.scheduler_enabled),
-            scheduler_interval_seconds=int(
-                get("SCHEDULER_INTERVAL_SECONDS", str(cls.scheduler_interval_seconds))
-            ),
+            scheduler_days=get("SCHEDULER_DAYS", cls.scheduler_days),
+            scheduler_times=get("SCHEDULER_TIMES", cls.scheduler_times),
+            scheduler_daily=boolean("SCHEDULER_DAILY", cls.scheduler_daily),
             claim_delay_min_seconds=float(
                 get("CLAIM_DELAY_MIN_SECONDS", str(cls.claim_delay_min_seconds))
             ),
@@ -76,10 +86,13 @@ class Settings:
     def validate(self) -> None:
         if not 1 <= self.app_port <= 65535:
             raise ConfigError(f"APP_PORT must be in 1..65535, got {self.app_port}")
-        if self.scheduler_interval_seconds < 1:
-            raise ConfigError(
-                f"SCHEDULER_INTERVAL_SECONDS must be >= 1, got {self.scheduler_interval_seconds}"
-            )
+        if not 1 <= self.no_vnc_port <= 65535:
+            raise ConfigError(f"NOVNC_PORT must be in 1..65535, got {self.no_vnc_port}")
+        try:
+            scheduling.normalize_days(self.scheduler_days)
+            scheduling.normalize_times(self.scheduler_times)
+        except scheduling.ScheduleError as exc:
+            raise ConfigError(str(exc)) from exc
         if self.claim_delay_min_seconds < 0:
             raise ConfigError(
                 f"CLAIM_DELAY_MIN_SECONDS must be >= 0, got {self.claim_delay_min_seconds}"

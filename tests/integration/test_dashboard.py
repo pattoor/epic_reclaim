@@ -43,7 +43,8 @@ def test_dashboard_served(tmp_path):
     assert "api/runs/${runId}/events" in script.text
     assert "add-account-form" in response.text
     assert "settings-scheduler-enabled" in response.text
-    assert "settings-interval-hours" in response.text
+    assert "settings-scheduler-days" in response.text
+    assert "settings-scheduler-times" in response.text
 
 
 def test_create_account_via_api(tmp_path):

@@ -416,34 +416,14 @@ function setupToggle(id, callback) {
 const schedulerToggle = setupToggle("settings-scheduler-enabled");
 const telegramToggle = setupToggle("settings-telegram");
 
-function splitInterval(totalSeconds) {
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return { days, hours, minutes, seconds };
-}
-
-function readInterval() {
-  const days = Math.max(0, Number($("settings-interval-days").value) || 0);
-  const hours = Math.max(0, Math.min(23, Number($("settings-interval-hours").value) || 0));
-  const minutes = Math.max(0, Math.min(59, Number($("settings-interval-minutes").value) || 0));
-  const seconds = Math.max(0, Math.min(59, Number($("settings-interval-seconds").value) || 0));
-  return days * 86400 + hours * 3600 + minutes * 60 + seconds;
-}
-
 async function loadSettings() {
   try {
     const settings = await api("/api/settings");
     schedulerToggle.update(settings.scheduler_enabled);
     telegramToggle.update(settings.telegram_enabled);
-
-    const interval = splitInterval(settings.scheduler_interval_seconds);
-    $("settings-interval-days").value = interval.days;
-    $("settings-interval-hours").value = interval.hours;
-    $("settings-interval-minutes").value = interval.minutes;
-    $("settings-interval-seconds").value = interval.seconds;
-
+    $("settings-scheduler-days").value = settings.scheduler_days || "";
+    $("settings-scheduler-times").value = settings.scheduler_times || "";
+    $("settings-scheduler-daily").checked = Boolean(settings.scheduler_daily);
     $("settings-delay-min").value = settings.claim_delay_min_seconds;
     $("settings-delay-max").value = settings.claim_delay_max_seconds;
     $("settings-feedback").textContent = "";
@@ -454,14 +434,11 @@ async function loadSettings() {
 
 $("settings-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const intervalSeconds = readInterval();
-  if (intervalSeconds < 1) {
-    showFeedback("settings-feedback", "Interval must be at least 1 second.", true);
-    return;
-  }
   const body = {
     scheduler_enabled: $("settings-scheduler-enabled").dataset.value === "true",
-    scheduler_interval_seconds: intervalSeconds,
+    scheduler_days: $("settings-scheduler-days").value || "THU",
+    scheduler_times: $("settings-scheduler-times").value || "14:05",
+    scheduler_daily: $("settings-scheduler-daily").checked,
     claim_delay_min_seconds: Number($("settings-delay-min").value),
     claim_delay_max_seconds: Number($("settings-delay-max").value),
     telegram_enabled: $("settings-telegram").dataset.value === "true",

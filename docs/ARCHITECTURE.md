@@ -2,7 +2,12 @@
 
 ## Objetivo y límites
 
-El MVP se ejecuta como un único proceso FastAPI dentro de un contenedor Docker. El proceso sirve la API y el dashboard, mantiene SQLite, ejecuta el scheduler y lanza un único workflow de claims a la vez.
+El sistema se despliega como un único contenedor Docker con dos modos de uso del mismo core:
+
+- **CLI principal** (`python -m app.cli`): interfaz de gestión por consola (menús stdlib numerados) sobre SSH, para cualquier operación. No arranca servidor web.
+- **Modo web opcional** (`python -m app.web`): FastAPI sirve API + dashboard estático y arranca el scheduler; pensado para integraciones externas (n8n, curl, `/health`) o para quien prefiera el dashboard. En producción el scheduler corre bajo el modo elegido; CLI y API nunca corren en procesos separados con lógica duplicada.
+
+Ambos modos llaman exactamente los mismos services y `RunWorkflow.run(trigger)`. El componente que corre con scheduler es el "runner"; en deployments reales el contenedor ejecuta `app.web` (con scheduler y API) y la administración diaria se hace por SSH con la CLI local del mismo contenedor (`docker compose exec epic-reclaim python -m app.cli`), que opera contra los mismos services.
 
 La prioridad es `corrección -> seguridad -> mantenibilidad -> simplicidad -> rendimiento`. La versión 1 solo implementa Epic Games Store. No se automatizan ni evaden CAPTCHA, MFA, rate limits o controles anti-bot, y no se guardan contraseñas de Epic.
 
@@ -10,51 +15,62 @@ La separación interna permite sustituir el adaptador de Epic en el futuro sin c
 
 ## Decisiones técnicas
 
-- **Python 3.12+** como runtime; **FastAPI 0.115+** para la API, el ciclo de vida y el servidor de la UI.
+- **Python 3.12+** como runtime; CLI con solo stdlib (menús enumerados, sin Rich/Textual).
+- **FastAPI 0.115+** (modo web opcional) para la API, el ciclo de vida y el dashboard estático.
 - **SQLite** (stdlib `sqlite3`) como base de datos única; sin ORM ni migraciones ajenas.
-- **Playwright 1.45+** para navegación persistente; es una capacidad opcional comprobada por `/health`.
-- **Scheduler interno asyncio**: un bucle propio, sin APScheduler ni procesos adicionales, respetando `RunLock`. Cada ejecución se lanza con el mismo `RunWorkflow.run(trigger)`.
+- **Playwright 1.45+** para navegación persistente; es una capacidad opcional comprobada por `/health` y por el diagnóstico de la CLI.
+- **Scheduler interno asyncio tipo cron simplificado**: días de semana + horas (default `THU 14:05`, preset "diario" para temporadas promocionales), sin APScheduler ni procesos adicionales, respetando `RunLock`. Detalle en `DECISIONS.md` (D4).
+- **Pantalla remota standalone** (Xvfb + x11vnc + websockify + noVNC) para autenticación interactiva: proceso propio del contenedor, nunca proxied dentro de FastAPI (el diseño previo con proxy interno es la causa documentada del fallo `ERR_INCOMPLETE_CHUNKED_ENCODING`). Detalle en `DECISIONS.md` (D3).
 - **httpx** para Telegram y para los tests de la API con `TestClient`.
 - **pytest** como runner de tests; sin dependencias de framework adicionales en runtime.
-- Frontend sin build step: HTML/CSS/JS estáticos servidos por FastAPI desde `static/`, consumiendo exclusivamente la API. `frontend/` queda reservado para futuras herramientas si hicieran falta.
+- Frontend del modo web sin build step: HTML/CSS/JS estáticos servidos por FastAPI desde `static/`.
 
-Razón del conjunto: el proyecto debe caber en un servidor de ~4 GB, mantener un solo proceso y evitar dependencias que no aporten a corrección o mantenibilidad.
+Razón del conjunto: cabe en el servidor real de ~2.5 GB disponibles (2 cores), mantiene un solo contenedor y evita dependencias que no aporten a corrección o mantenibilidad. En reposo el footprint objetivo es < 100 MB; el pico con Chromium headless < 700 MB.
 
 ## Estructura del repositorio
 
 ```text
 app/
-  main.py                 # Crea la aplicación y gestiona startup/shutdown.
-  config.py               # Variables de entorno y validación de configuración.
+  cli.py                  # CLI principal: menús stdlib; llama services; sin servidor web.
+  web.py                  # Modo web opcional: ASGI app FastAPI + scheduler (python -m app.web).
+  main.py                 # create_app de FastAPI y entrypoint uvicorn `app.main:app`.
+  bootstrap.py            # Runtime compartido CLI/web: DB, repos, services, workflow, lock.
+  config.py               # Variables de entorno y validación de configuración (incluye LOCALE).
   database.py             # Conexión SQLite, migraciones/esquema e integridad.
   domain/
     models.py             # Entidades, enums y tipos del dominio.
+    scheduling.py         # Helpers puros de slots (días + horas) y cálculo de próxima ejecución.
     errors.py             # Errores clasificados por recuperación/intervención.
   repositories/            # Consultas y escrituras de persistencia.
   services/
-    run_workflow.py       # Workflow único de scheduler, API y Run now.
+    run_workflow.py       # Workflow único de scheduler, CLI, API y Run now.
+    locks.py              # RunLock combinado: hilo + archivo O_EXCL entre procesos.
     account_service.py    # Estados, orden y operaciones de cuentas.
+    auth_service.py       # Ciclo de autenticación interactiva y pantalla remota.
     backup_service.py     # Backup/import validado sin sesiones.
-    export_service.py     # Exportación CSV/JSON de historial.
+    settings_service.py   # Config no secreta (scheduler día+hora, delays, integraciones).
+    discovery_service.py  # Descubrimiento de juegos vía adaptador.
   integrations/
     epic_adapter.py       # Interfaz de descubrimiento, ownership y claim.
     epic_playwright.py    # Selectores y comportamiento específico de Playwright.
+    auth_browser.py       # Contexto headed de autenticación (local GUI o Xvfb).
+    remote_screen.py      # noVNC/x11vnc/websockify standalone (proceso del entorno, no proxied).
     telegram.py           # Notificaciones opcionales, sin lógica de negocio.
-  scheduler.py            # Scheduler interno y coordinación del ciclo de vida.
-  api.py                  # Rutas, validación HTTP y serialización.
+  scheduler.py            # Scheduler cron simplificado: días + horas, RunLock.
+  api.py                  # Rutas, validación HTTP y serialización (modo web).
   logging_config.py       # Logs estructurados y filtrado de secretos.
-  static/                 # Build del frontend servido por FastAPI.
+  static/                 # UI estática del modo web opcional.
 tests/
-  unit/                   # Dominio, estados, retry e idempotencia.
-  integration/            # SQLite, API, scheduler y workflow con dobles.
+  unit/                   # Dominio, estados, retry, idempotencia, scheduler cron.
+  integration/            # SQLite, CLI, API, scheduler y workflow con dobles.
   e2e/                    # Flujos controlados sin depender de Epic en vivo.
-frontend/                 # Código fuente y dependencias del dashboard.
 Dockerfile
 docker-compose.yml
 requirements.txt
 .env.example
 .gitignore
 README.md
+docs/                     # Fuente de verdad (ver docs/INDEX.md).
 ```
 
 Los nombres son una guía de responsabilidades, no una razón para crear capas vacías. Una implementación pequeña puede agrupar archivos mientras conserve estas fronteras.
@@ -82,7 +98,7 @@ Trigger
   -> notificación Telegram opcional
 ```
 
-La adquisición del lock debe ocurrir antes de crear un workflow. Si ya existe una ejecución, el trigger devuelve `409` o una respuesta equivalente con el `run_id` activo; nunca inicia una segunda ejecución. El lock es de proceso porque el despliegue del MVP tiene una sola instancia.
+La adquisición del lock debe ocurrir antes de crear un workflow. Si ya existe una ejecución, el trigger devuelve `409` o una respuesta equivalente con el `run_id` activo; nunca inicia una segunda ejecución. El lock combina un lock de proceso (hilo) y un lock a nivel de archivo del SO (`state/run.lock` con detección de obsolescencia): el modo web (scheduler) y la CLI corren en procesos separados del mismo contenedor.
 
 La cuenta afectada por una intervención deja de procesarse para evitar solicitudes repetidas. Los demás juegos y cuentas continúan solo cuando el adaptador indica que es seguro. Un fallo de un juego no detiene automáticamente los siguientes juegos.
 
@@ -122,7 +138,9 @@ Los tipos de resultado deben distinguir éxito, ya existente, error transitorio,
 
 La sección oficial `Free Games` es la única fuente de elegibilidad. Se excluyen "coming soon", descuentos, demos y contenido fuera de esa sección. El adaptador no asume una cantidad fija ni un cambio semanal.
 
-Cada cuenta usa un perfil persistente independiente bajo `SESSIONS_PATH/{account_id}`. El navegador se abre bajo demanda, se reutiliza dentro de una ejecución cuando sea práctico y se cierra al finalizar para conservar RAM. La autenticación interactiva se inicia desde el dashboard, ejecuta el navegador en el servidor y permite que el usuario complete login, MFA o CAPTCHA manualmente. Para el MVP, el contexto headed se publica mediante una pantalla VNC/noVNC de vida corta, servida por el mismo contenedor y vinculada a un token de autenticación de un solo uso devuelto por `POST /api/accounts/{id}/authenticate`. El dashboard abre esa pantalla dentro del panel de autenticación; no se exponen CDP, cookies ni el perfil. Al confirmar autenticación o detectar timeout/cierre, se revoca el token, se persiste el perfil y se cierran navegador y pantalla remota. Si el despliegue no habilita noVNC, la autenticación interactiva queda marcada como no disponible en health y no se simula como completada.
+Cada cuenta usa un perfil persistente independiente bajo `SESSIONS_PATH/{account_id}`. El navegador se abre bajo demanda, se reutiliza dentro de una ejecución cuando sea práctico y se cierra al finalizar para conservar RAM.
+
+La autenticación interactiva se inicia desde la CLI (o API en modo web). Ejecuta Chromium headed dentro del contenedor bajo Xvfb y expone la pantalla mediante el stack noVNC como proceso standalone del entorno, publicado en su propio puerto (`NOVNC_PORT`, default 6080) sin pasar por un proxy de la aplicación. La CLI imprime la URL de acceso con token de un solo uso y contraseña efímera; el usuario la abre desde su PC o teléfono (LAN/Tailscale), completa login/MFA/CAPTCHA y la aplicación detecta el éxito, revoca el token, persiste el perfil y cierra navegador y pantalla remota. El puerto solo sirve contenido mientras exista un token activo; fuera de una autenticación no hay sesión VNC corriendo. Nunca se exponen CDP, cookies ni el perfil. Si el entorno no soporta el stack remoto (ej. desarrollo Windows), la autenticación puede usar Chromium headed local o queda marcada como no disponible en health/diagnóstico; nunca se simula como completada.
 
 Playwright/Chromium es una capacidad comprobada por `/health`; la API y la base deben seguir disponibles si Chromium no está instalado. Las sesiones nunca aparecen en respuestas, logs, exports ni backups normales.
 
@@ -158,7 +176,7 @@ Para progreso se prefiere polling corto de `/api/runs/{id}` o `/events`; no se i
 
 ## Scheduler, delays y recuperación
 
-El scheduler interno se inicia y detiene con el ciclo de vida de FastAPI. Consulta configuración de forma controlada, soporta intervalos configurables y no asume jueves. Antes de ejecutar usa el mismo `RunLock`; un error del scheduler se registra y no crea un loop agresivo.
+El scheduler interno se inicia y detiene con el ciclo de vida del runner (modo web por defecto). Es un cron simplificado: lista de días de semana (`MON..SUN`, default `THU`) + horas `HH:MM` (default `14:05`), con preset diario configurable para temporadas promocionales (ej. navidad). El núcleo determinista (`SlotRunner`, reloj inyectable) dispara a lo sumo una vez por slot y día: marca en memoria + consultas de runs ya iniciados dentro de la ventana (tolerante a reinicios; un slot perdido del día **no** se dispara retroactivamente). Se aplica un mínimo de 30 minutos entre ejecuciones automáticas. Consulta configuración en cada tick (los cambios aplican sin reiniciar) y respeta `RunLock`; un error del scheduler se registra y no crea un loop agresivo. Configuración legacy de intervalo (segundos) se migra explícitamente a slots (intervalo >= 86400 s = 24 h → días completos "diario"; otro intervalo → `THU 14:05` + nota en logs). Los helpers de días/horas viven en `app/domain/scheduling.py`.
 
 Los delays entre acciones relevantes son aleatorios y configurables, por defecto mínimo 2 y máximo 5 segundos. Son una medida de pacing conservador, no una técnica para evadir controles de Epic.
 
@@ -188,9 +206,9 @@ La exportación de historial soporta CSV y JSON, con filtros por cuenta, estado 
 
 ## Despliegue y recursos
 
-El contenedor incluye FastAPI, frontend compilado, dependencias Python y Chromium de Playwright. `APP_HOST`, `APP_PORT` (por defecto `8765`), `DATABASE_PATH` y `SESSIONS_PATH` son configurables. Docker Compose monta los volúmenes y el README documenta ejecución Docker y no Docker, port conflicts, LAN/Tailscale, reinicios, backups y troubleshooting.
+El contenedor incluye el runner (FastAPI opcional + scheduler), la CLI, dependencias Python, Chromium de Playwright y el stack de pantalla remota (Xvfb/x11vnc/websockify/noVNC). Puertos configurables: `APP_PORT` (default 8765, modo web) y `NOVNC_PORT` (default 6080, solo activo durante autenticaciones). Docker Compose monta los volúmenes, publica `NOVNC_PORT` (LAN/Tailscale) y el README documenta ejecución Docker y no Docker, port conflicts, LAN/Tailscale, reinicios, backups y troubleshooting.
 
-El diseño evita workers adicionales, Chromium permanente y claims paralelos. Una sola ejecución y una cuenta/juego por vez mantienen el consumo compatible con el servidor de referencia de aproximadamente 4 GB de RAM.
+El diseño evita workers adicionales, Chromium permanente y claims paralelos. Una sola ejecución y una cuenta/juego por vez mantienen el consumo compatible con el servidor de referencia: ~2.5 GB disponibles, 2 cores; reposo < 100 MB, pico con Chromium < 700 MB.
 
 ## Pruebas
 
@@ -203,7 +221,7 @@ Debe probarse el flujo normal, juegos ya adquiridos, repetición idempotente, fa
 
 ## Decisiones no negociables
 
-- Un único workflow para scheduler, dashboard y API.
+- Un único workflow para scheduler, CLI, dashboard y API.
 - Procesamiento secuencial y sin claims paralelos.
 - SQLite como base del MVP.
 - Perfiles Playwright persistentes por cuenta, fuera del filesystem efímero.

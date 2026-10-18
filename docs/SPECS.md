@@ -25,10 +25,10 @@ The MVP must:
 7. Persist browser sessions so accounts do not need to log in on every execution.
 8. Support interactive authentication/re-authentication when required.
 9. Detect situations requiring human intervention, such as CAPTCHA or MFA.
-10. Allow intervention through the dashboard and optionally through Telegram.
-11. Provide a web dashboard for management and monitoring.
-12. Provide a manual "Run now" operation.
-13. Provide an internal configurable scheduler.
+10. Allow intervention through the console interface and optionally through Telegram.
+11. Provide a console CLI as the primary management interface, with an optional web dashboard as a secondary interface.
+12. Provide a manual "Run now" operation from both CLI and API.
+13. Provide an internal configurable scheduler by day of week and time.
 14. Allow external triggers through an API endpoint.
 15. Work without n8n.
 16. Support optional n8n integration.
@@ -74,23 +74,25 @@ The MVP must NOT:
 
 Primary target:
 
-- Self-hosted home server.
-- Linux/Debian compatible.
-- Docker available.
-- Approximately 4 GB RAM in the reference environment.
-- Other Docker services may already be running.
+- Self-hosted home server ("g7"): Debian 13, 2 CPU cores, 3.7 GB RAM (~2.5 GB available; other Docker services run concurrently, e.g. n8n).
+- Docker available and required for production deployment.
+- Development may occur on Windows (WSL not required) using a local Python venv with Playwright/Chromium.
 - Access primarily through LAN/Wi-Fi and/or Tailscale.
 - No public port forwarding required.
 
 Default application port:
 
-- `8765`
+- `8765` (optional web mode)
 
-The port must be configurable through environment configuration.
+Optional remote-screen port (interactive authentication only):
 
-Documentation must explain how to change the port when it conflicts with another service.
+- `6080` (published, standalone noVNC stack; only active during an authentication session)
 
-The project must not assume that port 8765 is universally free.
+Ports must be configurable through environment configuration.
+
+Documentation must explain how to change the ports when they conflict with another service.
+
+The project must not assume that any port is universally free.
 
 ---
 
@@ -155,7 +157,7 @@ For each account:
 - The account has a persistent browser session.
 - The system must not store the Epic password as a normal application field.
 
-The dashboard must allow:
+The console CLI must allow the same actions (add account, authenticate, re-authenticate, change display name, enable/disable, change processing order, deactivate, permanently delete with explicit confirmation); the optional dashboard exposes them through the API when running in web mode.
 
 - Add account.
 - Authenticate account.
@@ -217,6 +219,8 @@ The system must:
 - Support periods where free games change daily.
 - Ignore games marked as coming soon/not currently available.
 - Avoid unrelated discounted/free-to-play content outside the intended "Free Games" section.
+- Operate against a configurable store locale (`LOCALE`, e.g. `es-AR`); when unset, Epic's own IP-based region resolution applies. The locale is a deployment-level setting, not per-user.
+- Persist game URLs with the locale used at discovery time; idempotency keys must not depend on the locale in the URL.
 
 For each detected game, the minimum persisted information is:
 
@@ -362,21 +366,25 @@ The system must not expose session/cookie contents in normal dashboard views or 
 
 Adding or re-authenticating an account requires an interactive browser flow.
 
+The user may start the flow from anywhere within the trusted network (LAN or Tailscale) using a PC or phone browser; the browser itself always runs on the server, and the resulting session/credentials are stored only on the server (g7 container volume). Credentials are never sent to or stored on the user's device beyond what the login page itself requires.
+
 Expected behavior:
 
-1. User starts authentication from the dashboard.
-2. The server starts the browser session.
-3. The user accesses the interactive browser remotely.
-4. The user performs the normal Epic login.
-5. If MFA is requested, the user completes it manually.
-6. If CAPTCHA is requested, the user completes it manually.
+1. User starts authentication from the console CLI (alternatively from the optional dashboard).
+2. The CLI/server starts the headed browser session inside the container on a virtual display.
+3. The CLI prints a one-use access URL (token + ephemeral password) for the remote screen served by the standalone noVNC stack.
+4. The user opens that URL from any browser in his trusted network and performs the normal Epic login from his PC.
+5. If MFA is requested, the user completes it manually in the remote screen.
+6. If CAPTCHA is requested, the user completes it manually in the remote screen.
 7. The application detects successful authentication.
-8. The persistent session is saved.
-9. The interactive browser is closed when authentication is complete.
+8. The persistent session is saved only in the server volume (`sessions`).
+9. The remote screen and browser are closed when authentication completes, fails, or times out; the one-use token is revoked.
 
-The browser must run on the server, not on the user's local PC.
+The browser must run on the server, not on the user's local PC. The remote screen stack must run as a standalone process/container component, not proxied through the application web server.
 
-The dashboard must provide a way to initiate and complete this process.
+On a GUI development machine (e.g. Windows), authentication may run as a normal headed local browser instead of the remote screen.
+
+In a deployment without support for the remote screen, interactive authentication must be reported as unavailable (health/logs) and never simulated as completed. A documented manual fallback is allowed: performing the login on a GUI machine and copying the persistent profile folder to the server volume, executed explicitly by the user.
 
 ---
 
@@ -511,20 +519,24 @@ The application must have an internal scheduler.
 The scheduler must be:
 
 - Enabled/disabled.
-- Configurable by interval.
-- Independent from n8n.
-- Independent from Telegram.
+- Configurable by **day(s) of week and time(s) of day**, not only by fixed interval. Each entry is a `day + HH:MM` combination.
+- Able to express multiple entries (e.g. `THU 14:05` and `THU 19:00`).
+- Able to run daily (all days, configured time) to support promotional periods where free games change every day (e.g. holidays/Christmas).
+- Independent from n8n, systemd, cron and Telegram (external cron may still be used through the external trigger endpoint).
+- Implemented without additional scheduler dependencies (stdlib asyncio loop), respecting `RunLock`.
 
-Example:
+Default configuration:
 
-- Enabled: `true`
-- Interval: `6 hours`
+- Day: Thursday.
+- Time: `14:05`.
 
 The system must not hard-code Thursday as the only execution day.
 
-The scheduler must support daily, weekly, and special promotional periods through configurable intervals.
-
 The scheduler must not start duplicate runs if another run is active.
+
+A minimum gap between automatic runs (at least 30 minutes) must be enforced regardless of configuration.
+
+When a run already executed for a configured slot (day+time), that slot must not fire again within the same day; each slot fires at most once per day it applies to.
 
 ---
 
@@ -611,24 +623,17 @@ When an intervention is resolved, Telegram should notify the user that it was re
 
 ---
 
-## 25. Dashboard
+## 25. Console CLI (primary) and Dashboard (optional)
 
-The dashboard is the primary management interface.
+The console CLI is the primary management interface. It must run standalone over SSH and cover the same conceptual areas as the dashboard, with numbered menus using only the Python standard library:
 
-It should contain four main conceptual areas:
+- Accounts: list, add, edit name/order, enable/disable, authenticate, re-authenticate, resolve intervention, deactivate, permanently delete with explicit confirmation.
+- Execution: `Run now` with live progress rendering in the console (account/game/outcome).
+- History: view with filters by account, date and status.
+- Settings: scheduler (days/times or daily preset), delays, display of active integrations.
+- Status: scheduler state, next scheduled run, last run summary, accounts needing attention.
 
-### Dashboard
-
-Show:
-
-- Overall system health.
-- Scheduler state.
-- Next run.
-- Last run.
-- Last result summary.
-- Accounts requiring intervention.
-- Recent claims.
-- `Run now` action.
+The CLI must always call the same services used by the API/dashboard/scheduler; it must never duplicate business logic.
 
 ### Accounts
 
@@ -660,7 +665,7 @@ Allow:
 Allow:
 
 - Scheduler enabled/disabled.
-- Scheduler interval.
+- Scheduler days of week and times (with "daily" preset for promotional seasons).
 - Claim delay minimum.
 - Claim delay maximum.
 - Telegram enabled/disabled.
@@ -1030,22 +1035,20 @@ Frontend dependencies must be defined through the frontend package manager.
 
 ## 38. Resource Constraints
 
-The reference server has approximately 4 GB RAM and runs other containers.
+The reference production server ("g7") has 2 cores and ~2.5 GB RAM available (3.7 GB total with other containers running).
 
-The application should be conservative with resources.
+The application must be conservative with resources.
 
 Requirements:
 
-- Avoid unnecessary background processes.
+- Idle footprint (scheduler + SQLite only): below ~100 MB RSS.
+- Peak during a run (headless Chromium): below ~700 MB total for the container.
 - Do not keep Chromium running permanently unless technically justified.
-- Prefer a single browser instance when practical.
-- Process accounts sequentially.
-- Avoid parallel claims.
-- Avoid unnecessary page loads.
-- Release browser resources after operations when possible.
+- Prefer a single browser instance; process accounts sequentially.
+- Avoid parallel claims, parallel browsers and unnecessary page loads.
+- Release browser resources after every run and after every authentication.
 - Keep database lightweight.
-
-The final architecture should consider these constraints explicitly.
+- CLI must operate without starting the web server.
 
 ---
 
@@ -1091,21 +1094,21 @@ The MVP is considered complete when a user can:
 
 1. Clone the repository.
 2. Configure `.env`.
-3. Run the application with Docker or documented non-Docker instructions.
-4. Open the dashboard through the server's LAN/Tailscale address.
+3. Run the application with Docker on the home server (or documented non-Docker instructions).
+4. Open the console CLI over SSH (optionally the dashboard through the server's LAN/Tailscale address).
 5. Add an Epic account.
-6. Authenticate once through the remote interactive browser.
+6. Authenticate once through the remote interactive browser opened via a one-use URL from his PC, with the session stored on the server.
 7. Configure one or more accounts.
-8. Configure the scheduler.
+8. Configure the scheduler (default Thursday 14:05; switchable to daily for promotional seasons).
 9. Leave the application running unattended.
 10. Have the system detect currently available Epic free games.
 11. Have the system claim them sequentially.
 12. Have repeated executions avoid duplicate logical claims.
 13. See successful and already-owned claims in history.
 14. See failures and interventions.
-15. Recover an account requiring CAPTCHA/MFA through the dashboard.
+15. Recover an account requiring CAPTCHA/MFA through the CLI (or dashboard).
 16. Optionally receive Telegram summaries and intervention alerts.
-17. Trigger a run manually.
+17. Trigger a run manually from the CLI.
 18. Trigger a run externally through the API.
 19. Export account history.
 20. Backup/import application data without exposing browser sessions by default.

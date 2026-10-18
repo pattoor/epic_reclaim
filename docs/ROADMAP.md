@@ -2,6 +2,8 @@
 
 Roadmap para construir **Epic Games Free Games Auto-Claimer** hasta la versión funcional `1.0.0`.
 
+**Revisión 2026-10-18:** se re-planó el cierre del proyecto tras una auditoría backend (ver `DECISIONS.md` D-2026-10-18 y las fases R1–R7 al final). Los milestones 0–8 se conservan como historial ya completado.
+
 El orden prioriza:
 
 `corrección -> seguridad -> mantenibilidad -> simplicidad -> rendimiento`
@@ -229,15 +231,76 @@ El orden prioriza:
 
 **Criterio de salida:** no quedan fallos críticos conocidos, las pruebas requeridas pasan y el flujo completo está documentado y reproducible.
 
+## Re-plan 2026-10-18: fases R1–R7 (camino a 1.0.0)
+
+Contexto y justificación de cada fase en `DECISIONS.md`. Orden de adversación: "corrección -> seguridad -> simplicidad -> rendimiento". Se hace una fase por vez con criterio de salida verificable.
+
+### R1 — Limpieza y entorno reproducible
+- [x] Confirmar `.venv` local funcional en Windows (dev): `pip install -r requirements.txt` + `playwright install chromium`.
+- [x] Suite completa en verde en local; el test del proxy remoto quedó obsoleto con la eliminación del proxy (R3): reemplazado por tests de URL standalone (sin websockify).
+- [x] `.env.example` actualizado con `LOCALE`, `NOVNC_PORT`, `PUBLIC_HOST` y nuevos settings de scheduler (`SCHEDULER_DAYS/TIMES/DAILY`).
+
+**Criterio de salida:** clone limpio + venv + pytest en verde (118/118) sin Epic live. **CUMPLIDO 2026-10-18.**
+
+### R2 — CLI principal (menú stdlib)
+- [x] `app/cli.py`: menú enumerado (cuentas, autenticar, run now, historial con filtros, settings, estado).
+- [x] Progreso de ejecución renderizado en consola (cuenta/juego/resultado) reutilizando eventos de run.
+- [x] Confirmaciones explícitas para eliminación permanente e imports.
+- [x] Tests de integración de la CLI con los services actuales (sin depender de la API).
+
+**Criterio de salida:** gestión completa del sistema por consola sin arrancar FastAPI. **CUMPLIDO 2026-10-18** (runtime compartido en `app/bootstrap.py`).
+
+### R3 — Autenticación interactiva funcional (noVNC standalone)
+- [x] Eliminar el proxy HTTP interno de noVNC (`app/auth_proxy.py` y rutas asociadas).
+- [x] noVNC/x11vnc/websockify como procesos standalone del contenedor, publicados en `NOVNC_PORT`, sin contenido sirvible sin sesión activa.
+- [x] `Authenticate` desde CLI imprime URL de un solo uso (token + contraseña efímera) con instrucciones.
+- [x] Detección de éxito/timeout/cierre, revocación de token, cierre de navegador y pantalla, perfil persistido.
+- [x] Flujo headed local en Windows dev (sin remote screen; `LocalHeadedScreen`).
+- [ ] Verificación manual completa del login remoto desde PC (éxito y timeout). Documentar resultado en `CAMBIOS.md` y resolver la deuda histórica.
+
+**Criterio de salida:** login remoto real desde la PC del usuario con sesión persistida en el servidor y pantalla cerrada al terminar. (Código listo; verificación manual empotrada en R6 sobre g7.)
+
+### R4 — Scheduler día+hora
+- [x] Implementar cron simplificado (días + horas, slots single-shot por día, gap mínimo 30 min).
+- [x] Migrar settings legacy de intervalo a slots.
+- [x] Preset "diario" para temporadas promocionales; display de próxima ejecución en CLI/health.
+- [x] Tests: slots, single-shot, cambios sin reiniciar, lock respetado.
+
+**Criterio de salida:** runs automáticos solo en las ventanas configuradas, default jueves 14:05. **CUMPLIDO 2026-10-18.**
+
+### R5 — Región (LOCALE)
+- [x] Config `LOCALE` aplicada a discovery y URLs; vacío = comportamiento por IP.
+- [x] Idempotencia basada en `epic_id`, independiente del locale en la URL.
+- [x] Test unitario de construcción de URLs y elegibilidad por locale.
+
+**Criterio de salida:** discovery+claim deterministas contra el dominio regional configurado. **CUMPLIDO 2026-10-18 (código y tests; confirmación live en R6).**
+
+### R6 — Validación live contra Epic (bloqueante para release)
+- [ ] Descubrimiento real de la sección Free Games (validar/ajustar selectores vigentes).
+- [ ] Login real + MFA/CAPTCHA manual si Epic lo pide.
+- [ ] Claim real de un juego y registro `claimed` con confirmación de biblioteca; repetir para ver `already_owned`.
+- [ ] Registrar hallazgos y ajustar selectores/clasificación según la tienda actual.
+
+**Criterio de salida:** un ciclo completo real por al menos una cuenta en el g7.
+
+### R7 — Despliegue en g7 y release
+- [ ] `docker compose up -d --build` en el g7; puertos y volúmenes verificados.
+- [ ] Verificar reinicio/recreación del contenedor sin pérdida de DB ni sesiones.
+- [ ] Verificar footprint: reposo < 100 MB, pico < 700 MB.
+- [ ] Instalación limpia desde clone usando solo documentación.
+- [ ] Cierre de milestones 9/10 y release 1.0.0 según checklist inferior.
+
+**Criterio de salida:** checklist de Release `1.0.0` completo.
+
 ## Release `1.0.0`
 
 Publicar `1.0.0` únicamente cuando se cumplan todos estos puntos:
 
 - [ ] El usuario puede clonar, configurar `.env` y ejecutar con Docker o sin Docker.
-- [ ] El dashboard es accesible por LAN/Tailscale y el puerto es configurable.
-- [ ] Se pueden añadir y autenticar varias cuentas mediante el navegador remoto del servidor.
+- [ ] La CLI es operable por SSH y los puertos web/noVNC son configurables (dashboard opcional).
+- [ ] Se pueden añadir y autenticar varias cuentas mediante el navegador remoto (noVNC standalone) desde la PC del usuario.
 - [ ] Las sesiones sobreviven a reinicios normales con el volumen persistente.
-- [ ] Se detectan los juegos elegibles actuales de la sección oficial `Free Games`.
+- [ ] Se detectan los juegos elegibles actuales de la sección oficial `Free Games` en la región configurada.
 - [ ] Los juegos se reclaman por cuenta y en orden, sin claims paralelos.
 - [x] Las ejecuciones repetidas son idempotentes y conservan historial por ejecución.
 - [x] Se muestran resultados `claimed`, `already_owned`, `failed` y `skipped`.

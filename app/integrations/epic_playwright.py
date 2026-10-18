@@ -17,7 +17,19 @@ from app.integrations.epic_adapter import (
     Outcome,
 )
 
-FREE_GAMES_URL = "https://store.epicgames.com/en-US/free-games"
+FREE_GAMES_PATH = "https://store.epicgames.com/free-games"
+
+
+def free_games_url(locale: str = "") -> str:
+    """Registry URL for the Free Games section.
+
+    A configured locale pins the store domain (deterministic claims); an
+    empty locale relies on Epic's IP-based region resolution.
+    """
+    locale = (locale or "").strip()
+    if locale:
+        return f"https://store.epicgames.com/{locale}/free-games"
+    return FREE_GAMES_PATH
 
 _NON_ELIGIBLE = ("coming soon", "unavailable", "demo", "free to play")
 _PAID_CTA = ("buy", "add to cart", "purchase", "pre-order", "preorder", "checkout")
@@ -92,8 +104,10 @@ class PlaywrightSession(AccountSession):
 
 
 class PlaywrightEpicAdapter(EpicAdapter):
-    def __init__(self, sessions_path: str):
+    def __init__(self, sessions_path: str, locale: str = "", base_url: str | None = None):
         self._sessions_path = Path(sessions_path)
+        self._locale = (locale or "").strip()
+        self._free_games_url = base_url or free_games_url(self._locale)
 
     def _import_playwright(self):
         try:
@@ -114,7 +128,7 @@ class PlaywrightEpicAdapter(EpicAdapter):
                 browser = playwright.chromium.launch(headless=True)
                 try:
                     page = browser.new_page()
-                    page.goto(FREE_GAMES_URL, timeout=30000, wait_until="domcontentloaded")
+                    page.goto(self._free_games_url, timeout=30000, wait_until="domcontentloaded")
                     page.wait_for_timeout(3000)
                     page_text = page.inner_text("body")
                     condition = _is_security_condition(page_text)

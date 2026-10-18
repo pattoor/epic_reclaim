@@ -39,15 +39,24 @@ class FakeScreen(RemoteScreen):
         return self._available
 
     def diagnostics(self) -> dict:
-        return self._diagnostics
+        diagnostics = dict(self._diagnostics)
+        diagnostics.setdefault("tools", {})
+        diagnostics.setdefault("novnc_web_dir_exists", True)
+        return diagnostics
 
     def start(self, password: str) -> str | None:
         self.started = True
         self.password = password
         return ":99" if self._available else None
 
-    def screen_url(self, token: str | None = None) -> str | None:
-        return f"/api/remote-screen/{token or ''}" if self._available else None
+    def screen_url(self, token: str | None = None, password: str | None = None) -> str | None:
+        if not self._available:
+            return None
+        host = "127.0.0.1"
+        return (
+            f"http://{host}:6080/vnc.html?host={host}&port=6080"
+            f"&password={password or ''}&autoconnect=1"
+        )
 
     def stop(self) -> None:
         self.stopped = True

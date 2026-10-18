@@ -57,7 +57,7 @@ class AuthService:
             missing = [tool for tool, present in diagnostics.get("tools", {}).items() if not present]
             if missing:
                 reason = f"missing remote screen tools: {', '.join(missing)}"
-            elif not diagnostics.get("novnc_web_dir_exists"):
+            elif not diagnostics.get("novnc_web_dir_exists", True):
                 reason = f"noVNC web directory not found: {diagnostics.get('novnc_web_dir')}"
             else:
                 reason = "remote screen not available"
@@ -85,7 +85,9 @@ class AuthService:
         session = AuthSession(
             token=token,
             account_id=account_id,
-            screen_url=self._screen.screen_url(token),
+            # The ephemeral VNC password AND the token gate the remote screen;
+            # never expose them in logs or events.
+            screen_url=self._screen.screen_url(token, vnc_password),
             status="running",
             vnc_password=vnc_password,
         )

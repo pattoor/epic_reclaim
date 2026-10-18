@@ -20,7 +20,7 @@ La separación interna permite sustituir el adaptador de Epic en el futuro sin c
 - **SQLite** (stdlib `sqlite3`) como base de datos única; sin ORM ni migraciones ajenas.
 - **Playwright 1.45+** para navegación persistente; es una capacidad opcional comprobada por `/health` y por el diagnóstico de la CLI.
 - **Scheduler interno asyncio tipo cron simplificado**: días de semana + horas (default `THU 14:05`, preset "diario" para temporadas promocionales), sin APScheduler ni procesos adicionales, respetando `RunLock`. Detalle en `DECISIONS.md` (D4).
-- **Pantalla remota standalone** (Xvfb + x11vnc + websockify + noVNC) para autenticación interactiva: proceso propio del contenedor, nunca proxied dentro de FastAPI (el diseño previo con proxy interno es la causa documentada del fallo `ERR_INCOMPLETE_CHUNKED_ENCODING`). Detalle en `DECISIONS.md` (D3).
+- **Pantalla remota standalone** (Xvnc de TigerVNC + websockify + noVNC; D9) para autenticación interactiva: proceso propio del contenedor, nunca proxied dentro de FastAPI (el diseño previo con proxy interno es la causa documentada del fallo `ERR_INCOMPLETE_CHUNKED_ENCODING`). Detalle en `DECISIONS.md` (D3, D9).
 - **httpx** para Telegram y para los tests de la API con `TestClient`.
 - **pytest** como runner de tests; sin dependencias de framework adicionales en runtime.
 - Frontend del modo web sin build step: HTML/CSS/JS estáticos servidos por FastAPI desde `static/`.
@@ -54,7 +54,7 @@ app/
     epic_adapter.py       # Interfaz de descubrimiento, ownership y claim.
     epic_playwright.py    # Selectores y comportamiento específico de Playwright.
     auth_browser.py       # Contexto headed de autenticación (local GUI o Xvfb).
-    remote_screen.py      # noVNC/x11vnc/websockify standalone (proceso del entorno, no proxied).
+    remote_screen.py      # noVNC/Xvnc/websockify standalone (proceso del entorno, no proxied).
     telegram.py           # Notificaciones opcionales, sin lógica de negocio.
   scheduler.py            # Scheduler cron simplificado: días + horas, RunLock.
   api.py                  # Rutas, validación HTTP y serialización (modo web).
@@ -140,7 +140,7 @@ La sección oficial `Free Games` es la única fuente de elegibilidad. Se excluye
 
 Cada cuenta usa un perfil persistente independiente bajo `SESSIONS_PATH/{account_id}`. El navegador se abre bajo demanda, se reutiliza dentro de una ejecución cuando sea práctico y se cierra al finalizar para conservar RAM.
 
-La autenticación interactiva se inicia desde la CLI (o API en modo web). Ejecuta Chromium headed dentro del contenedor bajo Xvfb y expone la pantalla mediante el stack noVNC como proceso standalone del entorno, publicado en su propio puerto (`NOVNC_PORT`, default 6080) sin pasar por un proxy de la aplicación. La CLI imprime la URL de acceso con token de un solo uso y contraseña efímera; el usuario la abre desde su PC o teléfono (LAN/Tailscale), completa login/MFA/CAPTCHA y la aplicación detecta el éxito, revoca el token, persiste el perfil y cierra navegador y pantalla remota. El puerto solo sirve contenido mientras exista un token activo; fuera de una autenticación no hay sesión VNC corriendo. Nunca se exponen CDP, cookies ni el perfil. Si el entorno no soporta el stack remoto (ej. desarrollo Windows), la autenticación puede usar Chromium headed local o queda marcada como no disponible en health/diagnóstico; nunca se simula como completada.
+La autenticación interactiva se inicia desde la CLI (o API en modo web). Ejecuta Chromium headed dentro del contenedor bajo Xvnc (TigerVNC: servidor X + VNC en un proceso) y expone la pantalla mediante el stack noVNC como proceso standalone del entorno, publicado en su propio puerto (`NOVNC_PORT`, default 6080) sin pasar por un proxy de la aplicación. La CLI imprime la URL de acceso con token de un solo uso y contraseña efímera; el usuario la abre desde su PC o teléfono (LAN/Tailscale), completa login/MFA/CAPTCHA y la aplicación detecta el éxito, revoca el token, persiste el perfil y cierra navegador y pantalla remota. El puerto solo sirve contenido mientras exista un token activo; fuera de una autenticación no hay sesión VNC corriendo. Nunca se exponen CDP, cookies ni el perfil. Si el entorno no soporta el stack remoto (ej. desarrollo Windows), la autenticación puede usar Chromium headed local o queda marcada como no disponible en health/diagnóstico; nunca se simula como completada.
 
 Playwright/Chromium es una capacidad comprobada por `/health`; la API y la base deben seguir disponibles si Chromium no está instalado. Las sesiones nunca aparecen en respuestas, logs, exports ni backups normales.
 
@@ -206,7 +206,7 @@ La exportación de historial soporta CSV y JSON, con filtros por cuenta, estado 
 
 ## Despliegue y recursos
 
-El contenedor incluye el runner (FastAPI opcional + scheduler), la CLI, dependencias Python, Chromium de Playwright y el stack de pantalla remota (Xvfb/x11vnc/websockify/noVNC). Puertos configurables: `APP_PORT` (default 8765, modo web) y `NOVNC_PORT` (default 6080, solo activo durante autenticaciones). Docker Compose monta los volúmenes, publica `NOVNC_PORT` (LAN/Tailscale) y el README documenta ejecución Docker y no Docker, port conflicts, LAN/Tailscale, reinicios, backups y troubleshooting.
+El contenedor incluye el runner (FastAPI opcional + scheduler), la CLI, dependencias Python, Chromium de Playwright y el stack de pantalla remota (Xvnc/websockify/noVNC). Puertos configurables: `APP_PORT` (default 8765, modo web) y `NOVNC_PORT` (default 6080, solo activo durante autenticaciones). Docker Compose monta los volúmenes, publica `NOVNC_PORT` (LAN/Tailscale) y el README documenta ejecución Docker y no Docker, port conflicts, LAN/Tailscale, reinicios, backups y troubleshooting.
 
 El diseño evita workers adicionales, Chromium permanente y claims paralelos. Una sola ejecución y una cuenta/juego por vez mantienen el consumo compatible con el servidor de referencia: ~2.5 GB disponibles, 2 cores; reposo < 100 MB, pico con Chromium < 700 MB.
 

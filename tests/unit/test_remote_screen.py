@@ -33,17 +33,19 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
     assert provider.start("session-password") == ":99"
 
     store_password = commands[0]
-    x11vnc = next(command for command in commands if "-rfbauth" in command)
+    xvnc = next(command for command in commands if command[0] == "Xvnc")
     websockify = next(command for command in commands if command[0] == "websockify")
-    assert store_password[:2] == ["x11vnc", "-storepasswd"]
-    assert "-rfbauth" in x11vnc
-    assert "-nopw" not in x11vnc
-    assert "-localhost" in x11vnc
+    assert store_password[:2] == ["vncpasswd", "-f"]
+    assert "-PasswordFile" in xvnc
+    assert "-localhost" in xvnc
+    assert "-rfbport" in xvnc
+    assert "-nopw" not in xvnc
     assert "--web" in websockify
     assert str(tmp_path) in websockify
 
     diagnostics = provider.diagnostics()
-    assert diagnostics["tools"]["Xvfb"] is True
+    assert diagnostics["tools"]["Xvnc"] is True
+    assert diagnostics["tools"]["vncpasswd"] is True
     assert diagnostics["novnc_web_dir_exists"] is True
     assert diagnostics["running"] is True
 
@@ -55,7 +57,7 @@ def test_novnc_reports_missing_tools(monkeypatch, tmp_path):
     provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
     assert provider.available() is False
     diagnostics = provider.diagnostics()
-    assert diagnostics["tools"]["Xvfb"] is False
+    assert diagnostics["tools"]["Xvnc"] is False
     assert provider.start("password") is None
     assert "missing tools" in (provider.diagnostics()["last_error"] or "").lower()
 

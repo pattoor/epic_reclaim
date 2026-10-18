@@ -252,7 +252,7 @@ Contexto y justificación de cada fase en `DECISIONS.md`. Orden de adversación:
 
 ### R3 — Autenticación interactiva funcional (noVNC standalone)
 - [x] Eliminar el proxy HTTP interno de noVNC (`app/auth_proxy.py` y rutas asociadas).
-- [x] noVNC/x11vnc/websockify como procesos standalone del contenedor, publicados en `NOVNC_PORT`, sin contenido sirvible sin sesión activa.
+- [x] noVNC/Xvnc/websockify como procesos standalone del contenedor, publicados en `NOVNC_PORT`, sin contenido sirvible sin sesión activa.
 - [x] `Authenticate` desde CLI imprime URL de un solo uso (token + contraseña efímera) con instrucciones.
 - [x] Detección de éxito/timeout/cierre, revocación de token, cierre de navegador y pantalla, perfil persistido.
 - [x] Flujo headed local en Windows dev (sin remote screen; `LocalHeadedScreen`).

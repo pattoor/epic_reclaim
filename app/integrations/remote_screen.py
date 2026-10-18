@@ -65,9 +65,13 @@ class LocalHeadedScreen(RemoteScreen):
 
 
 class NoVNCProvider(RemoteScreen):
-    """Runs Xvfb + x11vnc + websockify to expose a headed browser via noVNC.
+    """Runs Xvnc (TigerVNC: X server + VNC server in one process) + websockify.
 
-    VNC is protected with a per-session password (never -nopw). websockify
+    x11vnc was replaced after live validation showed it entering a userspace
+    busy-loop on Debian 13 (never accept()ing connections, browser stuck on
+    "connecting"); Xvnc answers the RFB banner immediately (DECISIONS D9).
+
+    VNC is protected with a per-session password (never no auth). websockify
     serves the noVNC web client from NOVNC_WEB_DIR (or the system path) and
     the stack runs standalone: the client connects directly to the published
     websockify port, never through a proxy inside this application.
@@ -96,7 +100,7 @@ class NoVNCProvider(RemoteScreen):
         self._last_error: str | None = None
 
     def diagnostics(self) -> dict:
-        tools = ("Xvfb", "x11vnc", "websockify")
+        tools = ("Xvnc", "vncpasswd", "websockify")
         tool_status = {tool: shutil.which(tool) is not None for tool in tools}
         novnc_exists = Path(self._novnc_web_dir).is_dir()
         alive, error = self._check_processes_alive()
@@ -118,7 +122,7 @@ class NoVNCProvider(RemoteScreen):
         }
 
     def available(self) -> bool:
-        tools = ("Xvfb", "x11vnc", "websockify")
+        tools = ("Xvnc", "vncpasswd", "websockify")
         if not all(shutil.which(tool) for tool in tools):
             return False
         if not Path(self._novnc_web_dir).is_dir():
@@ -126,7 +130,7 @@ class NoVNCProvider(RemoteScreen):
         return True
 
     def _terminate_stale_processes(self) -> None:
-        """Kill leftover Xvfb/x11vnc/websockify from an interrupted session.
+        """Kill leftover Xvnc/websockify (and pre-migration Xvfb/x11vnc).
 
         In the single-purpose container only this application owns these
         tools; killing by name keeps the ports reusable after a crash or a
@@ -134,7 +138,7 @@ class NoVNCProvider(RemoteScreen):
         """
         if not (shutil.which("pkill") and shutil.which("ps")):
             return
-        for pattern in ("Xvfb", "x11vnc", "websockify"):
+        for pattern in ("Xvnc", "Xvfb", "x11vnc", "websockify"):
             try:
                 subprocess.run(
                     ["pkill", "-f", pattern],
@@ -144,6 +148,18 @@ class NoVNCProvider(RemoteScreen):
                 )
             except OSError:  # pragma: no cover - defensive
                 continue
+        # A crashed X server leaves its lock/socket behind; the next start
+        # would die with "Server is already active for display".
+        try:
+            display_number = self._display.lstrip(":").split(".")[0]
+            for stale in (
+                f"/tmp/.X{display_number}-lock",
+                f"/tmp/.X{display_number}-sock",
+                f"/tmp/.X11-unix/X{display_number}",
+            ):
+                Path(stale).unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - defensive
+            pass
         # give the kernel a beat to release the listening sockets
         try:
             time.sleep(0.3)
@@ -177,7 +193,7 @@ class NoVNCProvider(RemoteScreen):
         return False
 
     def _check_processes_alive(self) -> tuple[bool, str | None]:
-        for process, name in zip(self._processes, ("Xvfb", "x11vnc", "websockify")):
+        for process, name in zip(self._processes, ("Xvnc", "websockify")):
             if process.poll() is not None:
                 stderr = self._read_stderr(process)
                 detail = f"stderr: {stderr}" if stderr else f"exit code {process.returncode}"
@@ -228,15 +244,18 @@ class NoVNCProvider(RemoteScreen):
         fd, passfile = tempfile.mkstemp(prefix="epic-reclaim-vnc-")
         os.close(fd)
         try:
-            result = subprocess.run(
-                ["x11vnc", "-storepasswd", password, passfile],
-                check=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-        except subprocess.CalledProcessError as exc:
-            self._last_error = f"x11vnc -storepasswd failed: {exc.stderr or 'unknown error'}"
+            with open(passfile, "wb") as handle:
+                # `vncpasswd -f` reads one plain password on stdin and writes
+                # the obfuscated VNC password file; same format x11vnc used.
+                result = subprocess.run(
+                    ["vncpasswd", "-f"],
+                    input=(password + "\n").encode("utf-8"),
+                    check=True,
+                    stdout=handle,
+                    stderr=subprocess.PIPE,
+                )
+        except (subprocess.CalledProcessError, OSError) as exc:
+            self._last_error = f"vncpasswd -f failed: {getattr(exc, 'stderr', None) or exc}"
             logger.exception("storepasswd_failed")
             try:
                 os.unlink(passfile)
@@ -245,22 +264,19 @@ class NoVNCProvider(RemoteScreen):
             return None
         self._passfile = Path(passfile)
 
-        xvfb = subprocess.Popen(
-            ["Xvfb", self._display, "-screen", "0", "1280x800x24"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-        )
-        x11vnc = subprocess.Popen(
+        xvnc = subprocess.Popen(
             [
-                "x11vnc",
-                "-display",
+                "Xvnc",
                 self._display,
-                "-rfbauth",
-                passfile,
-                "-localhost",
-                "-forever",
+                "-geometry",
+                "1280x800",
+                "-depth",
+                "24",
                 "-rfbport",
                 str(self._vnc_port),
+                "-PasswordFile",
+                passfile,
+                "-localhost",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -276,7 +292,7 @@ class NoVNCProvider(RemoteScreen):
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
         )
-        self._processes = [xvfb, x11vnc, websockify]
+        self._processes = [xvnc, websockify]
 
         alive, error = self._check_processes_alive()
         if not alive:
@@ -286,7 +302,7 @@ class NoVNCProvider(RemoteScreen):
             return None
 
         if not self._wait_for_port(self._vnc_port, self._startup_timeout_seconds):
-            self._last_error = f"x11vnc did not start listening on port {self._vnc_port}; stderr: {self._collect_stderrs()}"
+            self._last_error = f"Xvnc did not start listening on port {self._vnc_port}; stderr: {self._collect_stderrs()}"
             logger.error(self._last_error)
             self.stop()
             return None
@@ -310,7 +326,7 @@ class NoVNCProvider(RemoteScreen):
         return self._display
 
     def _format_unavailable_reason(self) -> str:
-        tools = ("Xvfb", "x11vnc", "websockify")
+        tools = ("Xvnc", "vncpasswd", "websockify")
         missing = [tool for tool in tools if not shutil.which(tool)]
         if missing:
             return f"missing tools: {', '.join(missing)}"
@@ -323,8 +339,8 @@ class NoVNCProvider(RemoteScreen):
 
         The token is informational ( Logs/identification only); the real gate
         is the ephemeral VNC password which is regenerated per session and
-        bound to the started Xvfb+x11vnc pair. No cookies, CDP or the
-        persistent profile are ever exposed through this URL.
+        bound to the started Xvnc server. No cookies, CDP or the persistent
+        profile are ever exposed through this URL.
         """
         if not self._processes:
             return None
@@ -346,6 +362,19 @@ class NoVNCProvider(RemoteScreen):
             except Exception:
                 pass
         self._processes = []
+        # Xvnc leaves a display lock/socket behind; remove it so the next
+        # start (possibly after a hard kill of this process) does not die
+        # with "Server is already active for display".
+        try:
+            display_number = self._display.lstrip(":").split(".")[0]
+            for stale in (
+                f"/tmp/.X{display_number}-lock",
+                f"/tmp/.X{display_number}-sock",
+                f"/tmp/.X11-unix/X{display_number}",
+            ):
+                Path(stale).unlink(missing_ok=True)
+        except OSError:  # pragma: no cover - defensive
+            pass
         if self._passfile is not None:
             try:
                 self._passfile.unlink()
@@ -357,13 +386,14 @@ class NoVNCProvider(RemoteScreen):
 def create_default_screen(settings) -> RemoteScreen:
     """Pick the remote-screen implementation fitting the environment.
 
-    Linux servers (the g7 Docker deployment) use the standalone Xvfb+noVNC
-    stack; GUI machines (Windows/macOS desktops) show the headed browser
-    locally instead, avoiding a VNC layer during development.
+    Linux servers (the g7 Docker deployment) use the standalone
+    Xvnc+websockify/noVNC stack; GUI machines (Windows/macOS desktops) show
+    the headed browser locally instead, avoiding a VNC layer during
+    development.
     """
     if sys.platform.startswith("win") or sys.platform == "darwin":
         return LocalHeadedScreen()
-    if not os.environ.get("DISPLAY") and shutil.which("Xvfb") is not None:
+    if not os.environ.get("DISPLAY") and shutil.which("Xvnc") is not None:
         # Headless Linux server: NoVNCProvider works fine without DISPLAY.
         pass
     return NoVNCProvider(

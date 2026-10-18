@@ -103,3 +103,25 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
   acceso legítimo que el usuario creó manualmente y mantiene la regla anti-evasión.
 - **Restricciones:** no se ocultan ni procesan cookies; el perfil es el propio volumen
   `sessions` protegido; nunca exportarlo ni trasmitirlo.
+
+### D9 — Pantalla remota con Xvnc (TigerVNC) en lugar de x11vnc (2026-10-18)
+
+- **Contexto:** el primer intento real de login remoto en g7 quedó atascado en
+  "connecting" del cliente noVNC. El diagnóstico de raíz (probes de TCP/WS dentro del
+  contenedor) mostró que `websockify` sirve estáticos y completa el handshake WS, pero
+  `x11vnc` nunca hace `accept()`: queda en busy-loop de userspace (60–95 % CPU) incluso
+  en un stack aislado (`Xvfb :98` + `x11vnc` limpio, puerto libre, sin auth) en
+  Debian 13. No es código de la app.
+- **Opciones:** (a) depurar/tunear `x11vnc` (flags, versión, glibc), (b) reemplazarlo por
+  `Xvnc` de TigerVNC (servidor X + servidor VNC en un solo proceso; Xvfb y x11vnc
+  desaparecen), (c) otra capa de escritorio remota (KasmVNC, xrdp).
+- **Decisión:** (b). Valide aislado en el contenedor: `Xvnc :96 -geometry 1280x800
+  -depth 24 -rfbport <port> -PasswordFile <vncpasswd -f> -localhost` responde el banner
+  `RFB 003.008` inmediatamente. `NoVNCProvider` pasa de 3 procesos (Xvfb+x11vnc+
+  websockify) a 2 (Xvnc+websockify); el passfile se genera con `vncpasswd -f`
+  (mismo formato que `-rfbauth`). El cleanup de procesos huérfanos y locks de display
+  (`/tmp/.X99-lock`, `/tmp/.X11-unix/X99`) cubre el nuevo servidor.
+- **Justificación:** stack estándar probado, un proceso menos, y elimina la dependencia
+  de un binario que falla como busy-loop en el entorno objetivo.
+- **Restricciones:** Dockerfile instala `tigervnc-standalone-server` en lugar de
+  `xvfb`+`x11vnc`; en modoheaded Windows/macOS sigue sin VNC (`LocalHeadedScreen`).

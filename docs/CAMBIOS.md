@@ -5,6 +5,19 @@
 ## Estado
 La autenticación interactiva aún no funciona en producción. Se acumulan problemas en el pipeline noVNC → proxy interno → navegador cliente.
 
+## 2026-10-18 — Reemplazo de x11vnc por Xvnc (D9)
+
+- Diagnóstico de raíz del primer intento real: el navegador quedaba en "connecting" porque
+  `x11vnc` entra en busy-loop de userspace en Debian 13 (60–95 % CPU, nunca `accept()`,
+  backlog acumulado), incluso con stack aislado y puertos libres. No era código de la app.
+- `NoVNCProvider` migrado de Xvfb+x11vnc+websockify a **Xvnc (TigerVNC) + websockify**;
+  passfile generado con `vncpasswd -f` (mismo formato obfuscated). Valide aislado: el
+  banner `RFB 003.008` responde inmediatamente.
+- Cleanup de huérfanos extiende el patrón `pkill -f` a `Xvnc` y remueve locks/socket del
+  display (`/tmp/.X99-lock`, `/tmp/.X11-unix/X99`) para evitar "Server is already active
+  for display" tras cierres forzados.
+- Dockerfile: `tigervnc-standalone-server` reemplaza `xvfb`+`x11vnc`. Suite 126/126 verde.
+
 ## Historial de cambios del día
 
 ### 1. Dashboard: alta de cuentas, tarjetas y settings

@@ -135,7 +135,7 @@ docker compose up -d --build   # reconstruir tras cambios
 
 ### Autenticacion interactiva con noVNC
 
-La imagen instala Xvfb, x11vnc, websockify y el cliente web noVNC, ejecutados como **procesos standalone** (no proxied por la app). Al iniciar **Authenticate** desde la CLI, esta imprime la URL directa `http://<PUBLIC_HOST>:<NOVNC_PORT>/vnc.html?...` (token de un solo uso + contrasena efimera para VNC). El navegador remoto corre en `g7-server`; el usuario completa login, MFA o CAPTCHA manualmente desde su PC. Una vez detectado el inicio de sesion, el servidor detiene noVNC, cierra el navegador y conserva unicamente el perfil persistente de Playwright. No se exponen cookies, CDP ni credenciales. Si la pantalla remota no esta disponible, el comando lo informa y `/health` reporta `remote_screen: unavailable` junto con el diagnostico.
+La imagen instala Xvnc (TigerVNC), websockify y el cliente web noVNC, ejecutados como **procesos standalone** (no proxied por la app). Al iniciar **Authenticate** desde la CLI, esta imprime la URL directa `http://<PUBLIC_HOST>:<NOVNC_PORT>/vnc.html?...` (token de un solo uso + contrasena efimera para VNC). El navegador remoto corre en `g7-server`; el usuario completa login, MFA o CAPTCHA manualmente desde su PC. Una vez detectado el inicio de sesion, el servidor detiene noVNC, cierra el navegador y conserva unicamente el perfil persistente de Playwright. No se exponen cookies, CDP ni credenciales. Si la pantalla remota no esta disponible, el comando lo informa y `/health` reporta `remote_screen: unavailable` junto con el diagnostico.
 
 ## Ejecucion sin Docker
 

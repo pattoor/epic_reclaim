@@ -58,3 +58,21 @@ El navegador carga la URL del proxy pero la pestaña queda congelada.
 ## Notas
 - No ejecutar tests automáticos hasta que el flujo manual en producción funcione.
 - `Dockerfile` y `docker-compose.yml` fueron modificados; recordar reconstruir la imagen en cada prueba.
+
+## Cierre del pipeline de autenticación (2026-10-18)
+
+El problema histórico del proxy HTTP interno quedó **descartado y eliminado**: la app ya
+no sirve noVNC por su propio puerto (`app/auth_proxy.py` eliminado). noVNC corre como
+stack standalone (Xvfb + x11vnc + websockify) publicado por compose en `NOVNC_PORT`, y la
+URL de un solo uso apunta directo a ese puerto (`/vnc.html?host=...&password=<efímera>`).
+
+Validación técnica en g7 (18/10/2026):
+
+- Arranque de sesión: procesos vivos, URL correcta, `vnc.html` servido en `6080`.
+- Revocación: la pantalla deja de responder al revocar (noVNC cerrado).
+- Zombie-proof: si una sesión anterior queda colgada, el siguiente `start()` limpia los
+  procesos huérfanos de la propia familia (`Xvfb`, `x11vnc`, `websockify`).
+- El cierre del navegador es cooperativo: al revocar se activa un flag que el thread del
+  login chequea cada 3 s y cierra Chromium con gracia por el propio thread de Playwright.
+
+Login real del usuario (éxito y timeout) queda como paso manual documentado en R3/R6.

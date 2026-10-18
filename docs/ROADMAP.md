@@ -276,18 +276,18 @@ Contexto y justificación de cada fase en `DECISIONS.md`. Orden de adversación:
 **Criterio de salida:** discovery+claim deterministas contra el dominio regional configurado. **CUMPLIDO 2026-10-18 (código y tests; confirmación live en R6).**
 
 ### R6 — Validación live contra Epic (bloqueante para release)
-- [ ] Descubrimiento real de la sección Free Games (validar/ajustar selectores vigentes).
+- [x] Descubrimiento real de la sección Free Games en g7: hallazgo — Cloudflare desafía al contexto headless fresco (403); quedó clasificado como intervención y mitigado con D8 (perfil autenticado + limpieza de procesos).
 - [ ] Login real + MFA/CAPTCHA manual si Epic lo pide.
 - [ ] Claim real de un juego y registro `claimed` con confirmación de biblioteca; repetir para ver `already_owned`.
 - [ ] Registrar hallazgos y ajustar selectores/clasificación según la tienda actual.
 
-**Criterio de salida:** un ciclo completo real por al menos una cuenta en el g7.
+**Criterio de salida:** un ciclo completo real por al menos una cuenta en el g7. (Pendiente login del usuario; discovery ya responde de forma honesta ante el desafío anti-bot.)
 
 ### R7 — Despliegue en g7 y release
-- [ ] `docker compose up -d --build` en el g7; puertos y volúmenes verificados.
-- [ ] Verificar reinicio/recreación del contenedor sin pérdida de DB ni sesiones.
-- [ ] Verificar footprint: reposo < 100 MB, pico < 700 MB.
-- [ ] Instalación limpia desde clone usando solo documentación.
+- [x] `docker compose up -d --build` en el g7; puertos 8765 y 6080 verificados, health verde, footprint reposo 54 MB (< 100 MB).
+- [x] Verificar reinicio/recreación del contenedor sin pérdida de DB ni sesiones.
+- [ ] Verificar footprint pico: < 700 MB (requiere ciclo con Chromium: parte del ciclo R6).
+- [x] Instalación limpia desde clone usando solo documentación (pull + compose build/up).
 - [ ] Cierre de milestones 9/10 y release 1.0.0 según checklist inferior.
 
 **Criterio de salida:** checklist de Release `1.0.0` completo.

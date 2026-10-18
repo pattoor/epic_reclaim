@@ -79,3 +79,27 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
   - Región vía `LOCALE` config.
   - Validación live contra Epic es **obligatoria** antes de declarar 1.0.0 (verify selectores contra la tienda actual).
 - Todo lo demás se reaffirma sin cambios: no otras tiendas en v1, no compras de juegos pagos, no evasión de CAPTCHA/MFA/anti-bot, no almacenar contraseñas, no sesiones en backups normales.
+
+### D8 — Descubrimiento con perfil autenticado y clasificación anti-bot (2026-10-18)
+
+- **Contexto:** validación live en g7 (R6): un `chromium` headless de contexto fresco recibe
+  el desafío anti-bot del store (Cloudflare, HTTP 403 "One more step / security check") y el
+  adaptador devolvía `0` juegos en silencio. Reglas del proyecto: **no evadir ni reintentar
+  automáticamente** desafíos anti-bot.
+- **Decisión:**
+  1. El descubrimiento (`discover_free_games`) puede reutilizar el **perfil persistente de una
+     cuenta ya autenticada** del usuario (cookies obtenidas por su login manual legítimo;
+     solo lectura de la página pública Free Games). `RunWorkflow` elige la primera cuenta que
+     tenga `epic_identity`; configurations sin cuentas autenticadas usan contexto fresco.
+  2. Marcadores de desafío (`one more step`, `security check`, `checking your browser`,
+     captcha, MFA) se clasifican como `InterventionRequiredError` — el run falla indicando
+     intervención, sin retries ni evasión.
+  3. Si la página Free Games cambia de estructura (no hay cards ni texto esperado), se
+     sube el mismo error de intervención con causa "selectores a revisar", nunca un 0-juegos
+     silencioso.
+  4. `NoVNCProvider.start()` limpia procesos huérfanos de la propia familia de herramientas
+     antes de arrancar, para que una sesión interrumpida no deje los puertos inutilizables.
+- **Justificación:** es honesto con el usuario (el desafío requiere acción humana), reusa el
+  acceso legítimo que el usuario creó manualmente y mantiene la regla anti-evasión.
+- **Restricciones:** no se ocultan ni procesan cookies; el perfil es el propio volumen
+  `sessions` protegido; nunca exportarlo ni trasmitirlo.

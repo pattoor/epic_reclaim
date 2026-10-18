@@ -1,4 +1,9 @@
+from types import SimpleNamespace
+
 from app.integrations.remote_screen import NoVNCProvider
+
+
+RUN_RESULT = SimpleNamespace(stdout=b"\x00" * 8, stderr=b"")
 
 
 def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
@@ -14,7 +19,10 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
         stderr = None
 
     monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda _: "tool")
-    monkeypatch.setattr("app.integrations.remote_screen.subprocess.run", lambda command, **kwargs: commands.append(command))
+    monkeypatch.setattr(
+        "app.integrations.remote_screen.subprocess.run",
+        lambda command, **kwargs: (commands.append(command) or RUN_RESULT),
+    )
 
     def fake_popen(command, **kwargs):
         commands.append(command)
@@ -32,10 +40,10 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
     provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
     assert provider.start("session-password") == ":99"
 
-    store_password = commands[0]
     xvnc = next(command for command in commands if command[0] == "Xvnc")
     websockify = next(command for command in commands if command[0] == "websockify")
-    assert store_password[:2] == ["vncpasswd", "-f"]
+    store_password = commands[0]
+    assert store_password[:2] == ["openssl", "enc"]
     assert "-PasswordFile" in xvnc
     assert "-localhost" in xvnc
     assert "-rfbport" in xvnc
@@ -45,7 +53,7 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
 
     diagnostics = provider.diagnostics()
     assert diagnostics["tools"]["Xvnc"] is True
-    assert diagnostics["tools"]["vncpasswd"] is True
+    assert diagnostics["tools"]["openssl"] is True
     assert diagnostics["novnc_web_dir_exists"] is True
     assert diagnostics["running"] is True
 
@@ -83,7 +91,10 @@ def test_novnc_fails_when_port_does_not_listen(monkeypatch, tmp_path):
         stderr = None
 
     monkeypatch.setattr("app.integrations.remote_screen.shutil.which", lambda _: "tool")
-    monkeypatch.setattr("app.integrations.remote_screen.subprocess.run", lambda command, **kwargs: commands.append(command))
+    monkeypatch.setattr(
+        "app.integrations.remote_screen.subprocess.run",
+        lambda command, **kwargs: (commands.append(command) or RUN_RESULT),
+    )
     monkeypatch.setattr("app.integrations.remote_screen.subprocess.Popen", lambda command, **kwargs: (commands.append(command) or Process()))
 
     provider = NoVNCProvider(novnc_web_dir=str(tmp_path))

@@ -99,8 +99,38 @@ class NoVNCProvider(RemoteScreen):
         self._passfile: Path | None = None
         self._last_error: str | None = None
 
+    def _write_passfile(self, password: str, passfile: str) -> None:
+        """Write an 8-byte obfuscated VNC password file (libvncserver format).
+
+        Debian 13 dropped the `vncpasswd` utility, so the obfuscated password
+        is produced with `openssl`: key = first 8 password bytes with every
+        bit reversed, encrypting 8 zero bytes in DES-ECB with no padding
+        (exactly what vncpasswd -f produces). Cross-checked against
+        pycryptodome. Falls back to the legacy provider for OpenSSL 3.
+        """
+        key = bytearray(password.encode("utf-8")[:8].ljust(8, b"\x00"))
+        for index, byte in enumerate(key):
+            reversed_bits = 0
+            for _ in range(8):
+                reversed_bits = (reversed_bits << 1) | (byte & 1)
+                byte >>= 1
+            key[index] = reversed_bits
+
+        command = ["openssl", "enc", "-des-ecb", "-K", bytes(key).hex().upper(), "-nopad"]
+        result = subprocess.run(command, input=b"\x00" * 8, capture_output=True)
+        if not result.stdout or len(result.stdout) != 8:
+            result = subprocess.run(
+                command + ["-provider", "legacy", "-provider", "default"],
+                input=b"\x00" * 8,
+                capture_output=True,
+            )
+        if len(result.stdout) != 8:
+            stderr = result.stderr.decode("utf-8", errors="replace")[:200]
+            raise RuntimeError(f"openssl des-ecb failed: {stderr or 'no output'}")
+        Path(passfile).write_bytes(result.stdout)
+
     def diagnostics(self) -> dict:
-        tools = ("Xvnc", "vncpasswd", "websockify")
+        tools = ("Xvnc", "openssl", "websockify")
         tool_status = {tool: shutil.which(tool) is not None for tool in tools}
         novnc_exists = Path(self._novnc_web_dir).is_dir()
         alive, error = self._check_processes_alive()
@@ -122,7 +152,7 @@ class NoVNCProvider(RemoteScreen):
         }
 
     def available(self) -> bool:
-        tools = ("Xvnc", "vncpasswd", "websockify")
+        tools = ("Xvnc", "openssl", "websockify")
         if not all(shutil.which(tool) for tool in tools):
             return False
         if not Path(self._novnc_web_dir).is_dir():
@@ -244,18 +274,9 @@ class NoVNCProvider(RemoteScreen):
         fd, passfile = tempfile.mkstemp(prefix="epic-reclaim-vnc-")
         os.close(fd)
         try:
-            with open(passfile, "wb") as handle:
-                # `vncpasswd -f` reads one plain password on stdin and writes
-                # the obfuscated VNC password file; same format x11vnc used.
-                result = subprocess.run(
-                    ["vncpasswd", "-f"],
-                    input=(password + "\n").encode("utf-8"),
-                    check=True,
-                    stdout=handle,
-                    stderr=subprocess.PIPE,
-                )
-        except (subprocess.CalledProcessError, OSError) as exc:
-            self._last_error = f"vncpasswd -f failed: {getattr(exc, 'stderr', None) or exc}"
+            self._write_passfile(password, passfile)
+        except Exception as exc:
+            self._last_error = f"could not create VNC password file: {exc}"
             logger.exception("storepasswd_failed")
             try:
                 os.unlink(passfile)
@@ -326,7 +347,7 @@ class NoVNCProvider(RemoteScreen):
         return self._display
 
     def _format_unavailable_reason(self) -> str:
-        tools = ("Xvnc", "vncpasswd", "websockify")
+        tools = ("Xvnc", "openssl", "websockify")
         missing = [tool for tool in tools if not shutil.which(tool)]
         if missing:
             return f"missing tools: {', '.join(missing)}"

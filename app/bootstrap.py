@@ -132,6 +132,7 @@ def build_runtime(
         if delay_between_actions is not None
         else _random_delay_provider(settings_service, database),
         notifier=notifier,
+        restore_hook=auth_service.silent_restore,
     )
 
     scheduler = (

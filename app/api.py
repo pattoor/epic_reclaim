@@ -174,10 +174,16 @@ def delete_account(account_id: int, request: Request, confirm: bool = False):
     return {"status": "deleted"}
 
 
+class AuthCodeSubmit(BaseModel):
+    code: str
+
+
 @router.post("/accounts/{account_id}/authenticate")
-def authenticate(account_id: int, request: Request):
+def authenticate(account_id: int, request: Request, mode: str = "screen"):
     try:
-        session = _auth_service(request).start(account_id)
+        if mode not in {"screen", "device", "local"}:
+            mode = "screen"
+        session = _auth_service(request).start(account_id, mode=mode)
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     if session.status == "unavailable":
@@ -185,7 +191,23 @@ def authenticate(account_id: int, request: Request):
     return {
         "token": session.token,
         "screen_url": session.screen_url,
+        "auth_url": session.auth_url,
         "status": session.status,
+    }
+
+
+@router.post("/auth/{token}/code")
+def submit_auth_code(token: str, body: AuthCodeSubmit, request: Request):
+    session = _auth_service(request).submit_code(token, body.code)
+    if session is None:
+        raise HTTPException(status_code=404, detail="no active authentication session for this token")
+    if session.error and session.status == "running":
+        # Epic rejected the code but the session stays open for a retry.
+        raise HTTPException(status_code=400, detail=session.error)
+    return {
+        "token": session.token,
+        "status": session.status,
+        "auth_url": session.auth_url,
     }
 
 
@@ -215,6 +237,7 @@ def auth_status(token: str, request: Request):
         "token": session.token,
         "account_id": session.account_id,
         "screen_url": session.screen_url,
+        "auth_url": session.auth_url,
         "status": session.status,
         "error": session.error,
     }

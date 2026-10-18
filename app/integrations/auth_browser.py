@@ -29,6 +29,8 @@ class InteractiveAuthBrowser(ABC):
         timeout_seconds: int,
         on_intervention: Callable[[str], None] | None = None,
         should_stop: Callable[[], bool] | None = None,
+        start_url: str | None = None,
+        headless: bool = False,
     ) -> AuthOutcome:
         pass
 
@@ -53,6 +55,8 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
         timeout_seconds: int,
         on_intervention: Callable[[str], None] | None = None,
         should_stop: Callable[[], bool] | None = None,
+        start_url: str | None = None,
+        headless: bool = False,
     ) -> AuthOutcome:
         try:
             from playwright.sync_api import sync_playwright
@@ -70,16 +74,23 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch_persistent_context(
                     user_data_dir=profile_path,
-                    headless=False,
+                    headless=headless,
                     env=env,
                 )
                 try:
                     page = browser.pages[0] if browser.pages else browser.new_page()
-                    # Id/login (the real Epic auth page) instead of the
-                    # storefront: store pages sit behind the anti-bot wall and
-                    # that challenge loops forever on a fresh profile, while
-                    # the login page lets the user complete it manually.
-                    page.goto(self._login_url(), timeout=30000)
+                    if start_url:
+                        # Token-based flows (D10) land on Epic's /id/exchange
+                        # page, which settles the SSO cookies without any
+                        # user interaction; detection below does the rest.
+                        page.goto(start_url, timeout=30000)
+                    else:
+                        # Id/login (the real Epic auth page) instead of the
+                        # storefront: store pages sit behind the anti-bot
+                        # wall and that challenge loops forever on a fresh
+                        # profile, while the login page lets the user
+                        # complete it manually.
+                        page.goto(self._login_url(), timeout=30000)
 
                     deadline = time.monotonic() + timeout_seconds
                     while time.monotonic() < deadline:

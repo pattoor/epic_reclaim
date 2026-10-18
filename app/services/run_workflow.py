@@ -92,6 +92,7 @@ class RunWorkflow:
         delay_between_actions: Callable[[], None] | None = None,
         sleeper: Sleeper = time.sleep,
         notifier: Any | None = None,
+        restore_hook: Callable[[int], bool] | None = None,
     ):
         self._database = database
         self._adapter = adapter
@@ -106,6 +107,7 @@ class RunWorkflow:
         self._delay = delay_between_actions or (lambda: None)
         self._sleeper = sleeper
         self._notifier = notifier
+        self._restore_hook = restore_hook
 
     def run(self, trigger: str) -> RunOutcome:
         if not self._lock.acquire():
@@ -187,6 +189,21 @@ class RunWorkflow:
                     RunEventType.GAMES_DETECTED,
                     message=f"{games_detected} games found",
                 )
+
+                if self._restore_hook is not None:
+                    # Accounts waiting on re-authentication get a silent
+                    # token refresh (D10) before the run decides who runs;
+                    # failures simply leave the account paused (D8).
+                    for account in self._accounts.list(connection):
+                        if account.state == AccountState.NEEDS_AUTHENTICATION:
+                            if self._restore_hook(account.id):
+                                self._events.add(
+                                    connection,
+                                    run_id,
+                                    RunEventType.ACCOUNT_STARTED,
+                                    account_id=account.id,
+                                    message="session silently restored",
+                                )
 
                 accounts = self._accounts.list_active(connection)
                 for account in accounts:

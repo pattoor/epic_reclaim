@@ -201,7 +201,22 @@ def _authenticate(runtime: Runtime) -> None:
     except ValueError:
         print("ID inválido.")
         return
-    session = runtime.auth_service.start(account_id)
+
+    # Try the silent token refresh (D10) first: when the account has a
+    # stored refresh token no user interaction is needed at all.
+    print("Probando restauración silenciosa (token guardado)...")
+    if runtime.auth_service.silent_restore(account_id):
+        print("✓ Sesión restaurada automáticamente: la cuenta está activa.")
+        return
+
+    print("\nModo de autenticación:")
+    print(" 1) Pantalla remota (noVNC): login en el navegador del server")
+    print(" 2) Código desde otro dispositivo: logueate en tu celu/PC y pegá el código")
+    print(" 3) Chromium local (solo útil si esta máquina tiene entorno gráfico)")
+    mode_choice = _input("Modo [1]> ") or "1"
+    mode = {"1": "screen", "2": "device", "3": "local"}.get(mode_choice, "screen")
+
+    session = runtime.auth_service.start(account_id, mode=mode)
     status = session.status
     if status == "unavailable":
         print(f"Autenticación no disponible: {session.error}")
@@ -209,7 +224,30 @@ def _authenticate(runtime: Runtime) -> None:
     if status == "failed":
         print(f"No se pudo iniciar: {session.error}")
         return
-    if session.screen_url:
+
+    if mode == "device" and session.auth_url:
+        print("\n" + "=" * 64)
+        print("Abrí esta URL en el navegador de tu celu o PC (cuenta linked ya):")
+        print(f"  {session.auth_url}")
+        print("Al terminar, Epic te muestra un código de un solo uso.")
+        print("Pegalo acá abajo: el server intercambia el código y completa")
+        print("la sesión solo (nada se guarda en tu dispositivo).")
+        print("=" * 64)
+        code = _input("Código> ").strip()
+        if not code:
+            runtime.auth_service.revoke(session.token)
+            print("Cancelado.")
+            return
+        current = runtime.auth_service.submit_code(session.token, code)
+        if current is None:
+            print("Sesión de autenticación no encontrada.")
+            return
+        if current.error:
+            print(f"✗ Epic rechazó el código: {current.error}")
+            print("Podés reintentar (generá un código nuevo en la URL).")
+            return
+        print("Intercambiando el código y asentando la sesión en el server...")
+    elif session.screen_url:
         print("\n" + "=" * 64)
         print("Abrí esta URL en tu navegador (PC o celular, LAN o Tailscale):")
         print(f"  {session.screen_url}")
@@ -218,14 +256,15 @@ def _authenticate(runtime: Runtime) -> None:
         print("=" * 64 + "\n")
     else:
         print("\nSe abrirá un Chromium local: completá el login en la ventana que aparece.")
+
     print("Esperando confirmación de login (15 min de timeout)...")
     deadline = time.time() + AUTH_TIMEOUT_MINUTES * 60
-    current = session
     while time.time() < deadline:
         time.sleep(3)
-        current = runtime.auth_service.get(session.token) or current
-        if current.status != "running":
+        current = runtime.auth_service.get(session.token)
+        if current is None or current.status != "running":
             break
+    current = current or runtime.auth_service.get(session.token) or session
     if current.status == "completed" and not current.error:
         print("✓ Autenticación confirmada: la cuenta está activa.")
     else:

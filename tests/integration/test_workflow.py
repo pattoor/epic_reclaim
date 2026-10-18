@@ -34,7 +34,7 @@ def _database(tmp_path) -> Database:
     return database
 
 
-def _build(database, adapter, delay=None, sleeper=None):
+def _build(database, adapter, delay=None, sleeper=None, restore_hook=None):
     lock = RunLock()
     workflow = RunWorkflow(
         database=database,
@@ -49,6 +49,7 @@ def _build(database, adapter, delay=None, sleeper=None):
         settings_provider=FakeSettingsProvider(),
         delay_between_actions=delay,
         sleeper=sleeper or (lambda _: None),
+        restore_hook=restore_hook,
     )
     return workflow
 
@@ -65,6 +66,13 @@ def _active_account(database) -> int:
     with database.connect() as connection:
         account = accounts.create(connection, "Personal")
         accounts.set_state(connection, account.id, AccountState.ACTIVE)
+    return account.id
+
+
+def _needs_auth_account(database) -> int:
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Waiting")
     return account.id
 
 
@@ -296,3 +304,42 @@ def test_workflow_discovery_security_pauses_accounts(tmp_path):
     with database.connect() as connection:
         stored = AccountsRepository().list(connection)
     assert stored[0].state == AccountState.NEEDS_INTERVENTION
+
+
+def test_workflow_silent_restore_reactivates_paused_account(tmp_path):
+    database = _database(tmp_path)
+    _active_account(database)
+    needs_auth_id = _needs_auth_account(database)
+    restored = []
+
+    def hook(account_id):
+        restored.append(account_id)
+        with database.connect() as connection:
+            AccountsRepository().set_state(connection, account_id, AccountState.ACTIVE)
+        return True
+
+    workflow = _build(database, FakeEpicAdapter(games=_games()), restore_hook=hook)
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    assert restored == [needs_auth_id]
+    assert outcome.accounts_processed == 2
+
+
+def test_workflow_silent_restore_failure_leaves_account_paused(tmp_path):
+    database = _database(tmp_path)
+    _active_account(database)
+    needs_auth_id = _needs_auth_account(database)
+    restored = []
+
+    def hook(account_id):
+        restored.append(account_id)
+        return False
+
+    workflow = _build(database, FakeEpicAdapter(games=_games()), restore_hook=hook)
+    outcome = workflow.run(RunTrigger.MANUAL)
+
+    assert restored == [needs_auth_id]
+    assert outcome.accounts_processed == 1
+    with database.connect() as connection:
+        stored = AccountsRepository().get(connection, needs_auth_id)
+    assert stored.state == AccountState.NEEDS_AUTHENTICATION

@@ -11,6 +11,8 @@ class FakeAuthBrowser(InteractiveAuthBrowser):
         self.calls = 0
         self.profile_path = None
         self.display = None
+        self.start_url = None
+        self.headless = None
 
     def run_auth(
         self,
@@ -19,10 +21,14 @@ class FakeAuthBrowser(InteractiveAuthBrowser):
         timeout_seconds: int,
         on_intervention=None,
         should_stop=None,
+        start_url: str | None = None,
+        headless: bool = False,
     ) -> AuthOutcome:
         self.calls += 1
         self.profile_path = profile_path
         self.display = display
+        self.start_url = start_url
+        self.headless = headless
         return self.outcome
 
 
@@ -74,6 +80,8 @@ class BlockingAuthBrowser(InteractiveAuthBrowser):
         timeout_seconds: int,
         on_intervention=None,
         should_stop=None,
+        start_url: str | None = None,
+        headless: bool = False,
     ) -> AuthOutcome:
         if on_intervention is not None:
             on_intervention("captcha")

@@ -3,6 +3,7 @@ import time
 
 from app.database import Database
 from app.domain.models import AccountState
+from app.integrations import epic_oauth
 from app.integrations.auth_browser import AuthOutcome
 from app.repositories import AccountsRepository
 from app.services.account_service import AccountService
@@ -265,6 +266,255 @@ def _wait(predicate, timeout_seconds: float = 5):
             return
         time.sleep(0.01)
     raise AssertionError("condition not reached within timeout")
+
+
+# --- Device code flow (D10) ---
+
+
+def test_auth_device_mode_starts_without_screen(tmp_path, monkeypatch):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    screen = FakeScreen(available=True)
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=screen,
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id, mode="device")
+
+    assert session.status == "running"
+    assert session.screen_url is None
+    assert session.auth_url is not None
+    assert "id/login" in session.auth_url
+    assert screen.started is False
+    auth.revoke(session.token)
+
+
+def test_auth_device_mode_completes_via_code(tmp_path, monkeypatch):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    sessions_dir = tmp_path / "sessions"
+
+    def fake_exchange_code(code):
+        assert code == "ONE-TIME-CODE"
+        return {"access_token": "at", "refresh_token": "re", "account_id": "acct-9", "display_name": "Epic User"}
+
+    def fake_exchange_code_from_token(access_token):
+        assert access_token == "at"
+        return "web-exchange-code"
+
+    monkeypatch.setattr(
+        "app.integrations.epic_oauth.exchange_authorization_code", fake_exchange_code
+    )
+    monkeypatch.setattr(
+        "app.integrations.epic_oauth.create_exchange_code",
+        fake_exchange_code_from_token,
+    )
+
+    browser = FakeAuthBrowser(AuthOutcome(success=True))
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=browser,
+        screen=FakeScreen(available=False),
+        sessions_path=str(sessions_dir),
+    )
+    session = auth.start(account.id, mode="device")
+    updated = auth.submit_code(session.token, "ONE-TIME-CODE")
+
+    assert updated.status == "running"
+    _wait(lambda: updated.status == "completed")
+
+    assert browser.start_url is not None
+    assert "id/exchange" in browser.start_url
+    assert browser.headless is True
+    assert browser.display is None
+
+    with database.connect() as connection:
+        stored = accounts.get(connection, account.id)
+    assert stored.state == AccountState.ACTIVE
+    assert stored.epic_identity == "acct-9"
+    assert stored.display_name == "Epic User"
+    # The refresh token is stored next to the profile for future silent restores.
+    stored_token = epic_oauth.load_refresh_token(str(sessions_dir / str(account.id)))
+    assert stored_token == "re"
+
+
+def test_auth_device_mode_rejects_bad_code_and_allows_retry(tmp_path, monkeypatch):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    attempts = []
+
+    def fake_exchange_code(code):
+        attempts.append(code)
+        if len(attempts) == 1:
+            raise epic_oauth.EpicOAuthError("invalid authorization code")
+        return {"access_token": "at", "refresh_token": "re", "account_id": "a", "display_name": "U"}
+
+    monkeypatch.setattr(
+        "app.integrations.epic_oauth.exchange_authorization_code", fake_exchange_code
+    )
+    monkeypatch.setattr(
+        "app.integrations.epic_oauth.create_exchange_code", lambda access_token: "exch"
+    )
+
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=FakeScreen(available=True),
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id, mode="device")
+    rejected = auth.submit_code(session.token, "bad-code")
+
+    assert rejected.status == "running"
+    assert "invalid authorization code" in (rejected.error or "")
+
+    accepted = auth.submit_code(session.token, "good-code")
+    assert accepted.status == "running"
+    assert accepted.error is None
+    _wait(lambda: accepted.status == "completed")
+    auth._revoke(session.token)
+
+
+def test_submit_code_unknown_token_returns_none(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=FakeScreen(available=True),
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    assert auth.submit_code("no-such-token", "123") is None
+
+
+# --- Silent restore from stored refresh token (D10) ---
+
+
+def test_silent_restore_activates_account_without_user(tmp_path, monkeypatch):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    sessions_dir = tmp_path / "sessions"
+    profile = str(sessions_dir / str(account.id))
+    epic_oauth.save_session_tokens(
+        profile, {"refresh_token": "re", "account_id": "acct-5", "display_name": "Epic User"}
+    )
+
+    def fake_refresh(token):
+        assert token == "re"
+        return {"access_token": "at2", "refresh_token": "re2", "account_id": "acct-5", "display_name": "Epic User"}
+
+    monkeypatch.setattr("app.integrations.epic_oauth.refresh_tokens", fake_refresh)
+    monkeypatch.setattr(
+        "app.integrations.epic_oauth.create_exchange_code",
+        lambda access_token: "exch",
+    )
+
+    browser = FakeAuthBrowser(AuthOutcome(success=True))
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=browser,
+        screen=FakeScreen(available=True),
+        sessions_path=str(sessions_dir),
+    )
+    assert auth.silent_restore(account.id) is True
+
+    assert browser.start_url is not None
+    assert "id/exchange" in browser.start_url
+    assert browser.headless is True
+
+    with database.connect() as connection:
+        stored = accounts.get(connection, account.id)
+    assert stored.state == AccountState.ACTIVE
+    # The rotated refresh token replaces the stored one.
+    assert epic_oauth.load_refresh_token(profile) == "re2"
+
+
+def test_silent_restore_returns_false_without_stored_token(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=FakeScreen(available=True),
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    assert auth.silent_restore(account.id) is False
+
+
+def test_silent_restore_returns_false_when_epic_rejects_token(tmp_path, monkeypatch):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    sessions_dir = tmp_path / "sessions"
+    profile = str(sessions_dir / str(account.id))
+    epic_oauth.save_session_tokens(
+        profile, {"refresh_token": "re", "account_id": "acct-5", "display_name": "Epic User"}
+    )
+
+    def fake_refresh(token):
+        raise epic_oauth.EpicOAuthError("invalid refresh token")
+
+    monkeypatch.setattr("app.integrations.epic_oauth.refresh_tokens", fake_refresh)
+
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=FakeScreen(available=True),
+        sessions_path=str(sessions_dir),
+    )
+    assert auth.silent_restore(account.id) is False
+
+
+def test_silent_restore_returns_false_when_another_flow_is_running(tmp_path, monkeypatch):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    sessions_dir = tmp_path / "sessions"
+    epic_oauth.save_session_tokens(
+        str(sessions_dir / str(account.id)), {"refresh_token": "re", "account_id": "a", "display_name": "U"}
+    )
+    monkeypatch.setattr(
+        "app.integrations.epic_oauth.refresh_tokens", lambda token: {"access_token": "at", "refresh_token": "re", "account_id": "a", "display_name": "U"}
+    )
+
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=FakeAuthBrowser(AuthOutcome(success=True)),
+        screen=FakeScreen(available=True),
+        sessions_path=str(sessions_dir),
+    )
+    session = auth.start(account.id, mode="device")
+    assert auth.silent_restore(account.id) is False
+    auth._revoke(session.token)
 
 
 def test_revoke_sets_cooperative_stop_and_closes_screen(tmp_path):

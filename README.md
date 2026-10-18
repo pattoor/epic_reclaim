@@ -23,7 +23,7 @@ El modo web (FastAPI + dashboard + API + scheduler) es opcional (`python -m app.
 ## Como funciona
 
 1. Se agrega la(s) cuenta(s) Epic por CLI.
-2. `Authenticate` imprime una URL de un solo uso (`http://<ip-g7>:<NOVNC_PORT>`) para completar el login/MFA/CAPTCHA desde el navegador de tu PC; el browser corre en el contenedor del servidor y la sesion queda guardada alla (volumen `sessions`).
+2. `Authenticate` ofrece modos: pantalla remota noVNC (URL de un solo uso `http://<ip-g7>:<NOVNC_PORT>`), **codigo desde otro dispositivo** (logueate en el celu/PC y pega el codigo) o Chromium local; el browser del server queda en el contenedor y la sesion se guarda alla (volumen `sessions`). Si hay un refresh token guardado, primero intenta restaurar la sesion sola.
 3. El scheduler interno ejecuta el workflow unico por cron simplificado: por defecto **jueves 14:05**, configurable (dias + horas, preset "diario" para temporadas como navidad).
 4. Cada run: descubre los juegos gratuitos vigentes (locale configurable `LOCALE`, default por IP), procesa cuentas en orden, verifica ownership y reclama secuencialmente guardando historial completo.
 
@@ -248,6 +248,17 @@ Al habilitarse, el bot envia un resumen por cada ejecucion y alertas de CAPTCHA,
 CAPTCHA, MFA, autenticacion expirada, rate limits y bloqueos no se resuelven ni se reintentan ciegamente. La cuenta pasa a `needs_intervention`, `needs_authentication` o `paused`, con el motivo visible en el dashboard.
 
 Una vez resuelto el problema desde el dashboard, la cuenta vuelve a `active` y puede continuar el trabajo pendiente de forma segura. Telegram puede avisar de estas situaciones, pero no es necesario para resolverlas.
+
+### Login por codigo desde otro dispositivo (celular o PC, modo device)
+
+Alternativa que no usa ni noVNC ni archivos: la CLI pide elegir el modo al autenticar (`1 = pantalla remota, 2 = codigo desde otro dispositivo, 3 = Chromium local`). En modo device:
+
+1. Antes de pedir modo, la CLI intenta una **restauracion silenciosa**: si la cuenta tiene un refresh token guardado, se re-autentica sola (tambien ocurre al inicio de cada run) sin que el usuario haga nada.
+2. El CLI imprime la URL oficial de login de Epic (`epicgames.com/id/login?...`); abrila en el navegador de tu celu o PC (con tus cuentas ya logueadas) y completa MFA/captcha ahi.
+3. Epic muestra un **codigo de un solo uso**; pegalo en la CLI. El servidor lo intercambia por tokens OAuth y asienta la sesion en el perfil del contenedor (Chromium headless sobre `id/exchange`); nada queda en tu dispositivo. En la API: `POST /api/accounts/{id}/authenticate?mode=device` y `POST /api/auth/{token}/code` con `{"code": "..."}`.
+4. El refresh token queda solo en el volumen del server (`data/sessions/<id>/epic_session.json`), nunca en DB, logs ni backups, y permite restauraciones silenciosas futuras.
+
+Usa las credenciales publicas del cliente del Epic Games Launcher (los mismos defaults que legendary/Heroic); no requiere registrar nada en el portal de developers de Epic. CAPTCHA/MFA se completan manualmente en TU navegador (regla D8 intacta).
 
 ### Fallback manual: login en la PC y copia del perfil (SPECS 15)
 

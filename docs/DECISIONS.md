@@ -143,3 +143,37 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
   instante; el default 5 tolera pestañas cerradas a medias). En g7 verificado:
   la primera conexión del navegador tras el arranque conecta de una, y
   reconexiones rápidas repetidas no degradan el servidor.
+
+### D10 — Login por código desde otro dispositivo + restauración silenciosa (2026-10-18)
+
+- **Contexto:** el login por pantalla remota (D9) funciona, pero escribir MFA/CAPTCHA
+  dentro de noVNC es lento y el usuario quiere loguearse desde el celular sin copiar
+  archivos ni instalar nada. Además, las re-autenticaciones durante runs no debían
+  exigir intervención humana si podía evitarse.
+- **Opciones:** (a) device-code OAuth de Epic Online Services (requiere registrar una
+  app en el portal de developers), (b) authorization code con las credenciales
+  públicas del cliente del Epic Games Launcher (los mismos defaults que legendary y
+  Heroic usan hace años), (c) no hacer nada más.
+- **Decisión:** (b), con restauración silenciosa por refresh token.
+  1. **Modo device (CLI opción "código desde otro dispositivo"):** el server genera
+     `https://www.epicgames.com/id/login?redirectUrl=<redirect clientId response=code>`;
+     el usuario lo abre en el navegador de su celu o PC (cuentas ya logueadas), se
+     loguea ahí (MFA en mano, sin noVNC) y Epic muestra un código de un solo uso; lo pega
+     en el CLI. El server intercambia el código por tokens OAuth, crea un exchange
+     code y lanza Chromium headless en `id/exchange?exchangeCode=...` que asienta las
+     cookies SSO en el perfil del g7. Nada queda en el dispositivo del usuario.
+  2. **Restauración silenciosa:** el refresh token se guarda SOLO junto al perfil
+     (`data/sessions/<id>/epic_session.json`, volumen del server; nunca en la DB,
+     logs ni backups). En cada run, las cuentas en `needs_authentication` con token
+     guardado se restauran solas antes del loop de claims (hook en `RunWorkflow`);
+     también se intenta primero al autenticar desde el CLI. Si Epic rechaza el token,
+     la cuenta queda igual que antes (D8) y corresponde login manual.
+  3. La identidad del usuario viene del token (`account_id`/`display_name`), no del
+     scraping de la página, salvo que este falte.
+- **Justificación:** sin registro de app ni secretos propios; login real de Epic en el
+  navegador del usuario (nunca pasamos credenciales) y re-auths sin intervención.
+  Credenciales del launcher escritas en las constantes de `epic_oauth.py`: son
+  públicas de larga data en proyectos OSS del ecosistema; no son secretos del repo.
+- **Restricciones:** no resuelve CAPTCHA/MFA automáticamente; todo lo interactivo sigue
+  siendo manual (D8). Los tokens nunca se loguean. El modo "device" corre headless,
+  así que no requiere pantalla remota ni Xvnc.

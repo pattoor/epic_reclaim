@@ -5,6 +5,34 @@
 ## Estado
 La autenticación interactiva aún no funciona en producción. Se acumulan problemas en el pipeline noVNC → proxy interno → navegador cliente.
 
+## 2026-10-18 — Login por codigo desde otro dispositivo + restauracion silenciosa (D10)
+
+- Nuevo modo de autenticacion: la CLI (`Cuentas > Autenticar`) pide modo:
+  `1) pantalla remota noVNC`, `2) codigo desde otro dispositivo`, `3) Chromium local`.
+  Antes de pedir modo intenta **restauracion silenciosa** si hay refresh token guardado.
+- Modo device (D10): el server imprime la URL oficial de login de Epic; el usuario abre
+  el navegador de su celu/PC, completa login/MFA/captcha AHÍ, Epic muestra un codigo de
+  un solo uso, se pega en la CLI, y el server lo intercambia por tokens OAuth y asienta
+  la sesion en el perfil del contenedor con Chromium **headless** (no requiere Xvnc ni
+  pantalla remota). Nada queda en el dispositivo del usuario.
+- Nuevo modulo `app/integrations/epic_oauth.py` (stdlib): OAuth de cuentas Epic con las
+  credenciales publicas del cliente del Epic Games Launcher (defaults de legendary/Heroic
+  sin Registro en el portal de developers). Endpoints: `/account/api/oauth/token`
+  (grants `authorization_code`/`refresh_token`), `/account/api/oauth/exchange`
+  (exchange para `id/exchange` web). Tokens NUNCA se loguean; el refresh token vive SOLO
+  en `data/sessions/<id>/epic_session.json` (volumen; fuera de DB/logs/backups).
+- `PlaywrightAuthBrowser.run_auth` acepta `start_url` (para `id/exchange`) y `headless`;
+  `AuthService.start(mode=...)`, `submit_code(token, code)` y `silent_restore(account_id)`.
+- Restauracion silenciosa en runs: `RunWorkflow` recibe `restore_hook` (cableado desde
+  `bootstrap` a `AuthService.silent_restore`); al inicio de cada run, cuentas
+  `needs_authentication` con token guardado se re-autentican solas (evento
+  `account_started: session silently restored`); si falla quedan pausadas (D8).
+- API: `POST /api/accounts/{id}/authenticate?mode=device|screen|local` (devuelve
+  `auth_url`) y `POST /api/auth/{token}/code` `{"code": "..."}`.
+- Documentacion: D10 en `DECISIONS.md`, seccion "Login por codigo desde otro
+  dispositivo" en README. Suite 149/149 verde (tests unit de epic_oauth, device flow y
+  silent_restore en auth_service, restore_hook en run_workflow).
+
 ## 2026-10-18 — Reemplazo de x11vnc por Xvnc (D9)
 
 - Diagnóstico de raíz del primer intento real: el navegador quedaba en "connecting" porque

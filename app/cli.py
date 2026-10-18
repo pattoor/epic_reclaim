@@ -217,8 +217,9 @@ def _authenticate(runtime: Runtime, account_id: int | None = None) -> None:
     print(" 1) Pantalla remota (noVNC): login en el navegador del server")
     print(" 2) Código desde otro dispositivo: logueate en tu celu/PC y pegá el código")
     print(" 3) Chromium local (solo útil si esta máquina tiene entorno gráfico)")
+    print(" 4) Desbloquear store (noVNC: pasás vos el muro anti-bot de la store)")
     mode_choice = _input("Modo [1]> ") or "1"
-    mode = {"1": "screen", "2": "device", "3": "local"}.get(mode_choice, "screen")
+    mode = {"1": "screen", "2": "device", "3": "local", "4": "unlock"}.get(mode_choice, "screen")
 
     session = runtime.auth_service.start(account_id, mode=mode)
     status = session.status
@@ -258,7 +259,12 @@ def _authenticate(runtime: Runtime, account_id: int | None = None) -> None:
         print("\n" + "=" * 64)
         print("Abrí esta URL en tu navegador (PC o celular, LAN o Tailscale):")
         print(f"  {session.screen_url}")
-        print("Completá el login / MFA / CAPTCHA de Epic ahí dentro.")
+        if mode == "unlock":
+            print("Objetivo: pasá el muro anti-bot ('just a moment') a mano hasta ver")
+            print("los juegos free de la semana en la pág; ahí el logout automático")
+            print("cierra y guarda las cookies de la tienda en el perfil del server.")
+        else:
+            print("Completá el login / MFA / CAPTCHA de Epic ahí dentro.")
         print("Las credenciales quedan SOLO en el servidor; no en esta máquina.")
         print("=" * 64 + "\n")
     else:

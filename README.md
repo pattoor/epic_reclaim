@@ -251,7 +251,7 @@ Una vez resuelto el problema desde el dashboard, la cuenta vuelve a `active` y p
 
 ### Login por codigo desde otro dispositivo (celular o PC, modo device)
 
-Alternativa que no usa ni noVNC ni archivos: la CLI pide elegir el modo al autenticar (`1 = pantalla remota, 2 = codigo desde otro dispositivo, 3 = Chromium local`). En modo device:
+Alternativa que no usa ni noVNC ni archivos: la CLI pide elegir el modo al autenticar (`1 = pantalla remota, 2 = codigo desde otro dispositivo, 3 = Chromium local, 4 = desbloquear store`). En modo device:
 
 1. Antes de pedir modo, la CLI intenta una **restauracion silenciosa**: si la cuenta tiene un refresh token guardado, se re-autentica sola (tambien ocurre al inicio de cada run) sin que el usuario haga nada.
 2. El CLI imprime la URL oficial de login de Epic (`epicgames.com/id/login?...`); abre en el navegador de tu celu o PC (con tus cuentas ya logueadas) y completa MFA/captcha ahi.
@@ -261,6 +261,14 @@ Alternativa que no usa ni noVNC ni archivos: la CLI pide elegir el modo al auten
 6. El refresh token queda solo en el volumen del server (`data/sessions/<id>/epic_session.json`), nunca en DB, logs ni backups, y permite restauraciones silenciosas futuras.
 
 Usa las credenciales publicas del cliente del Epic Games Launcher (los mismos defaults que legendary/Heroic); no requiere registrar nada en el portal de developers de Epic. CAPTCHA/MFA se completan manualmente en TU navegador (regla D8 intacta).
+
+### Desbloquear la store cuando el muro anti-bot truena el run
+
+Verificado en vivo (2026-10-18): la store de Epic pone un desafio anti-bot ("just a moment") a las paginas de tienda desde la IP del datacenter, y **no baja solo** en ~90 s de espera pasiva: exige interaccion humana. El login (`id/login`) no lo dispara; las paginas de la tienda si. Ademas la regla D8 impide resolverlo automaticamente. Por eso existe el modo `4) Desbloquear store`:
+
+1. La CLI del server imprime la URL de noVNC y el browser headed abre la pagina de free-games con tu perfil.
+2. En la pantalla remota resolv vos el desafio a mano hasta **ver los juegos de la semana**; ahi la deteccion da la sesion por lista y cierra solo, guardando cookies/estado en el perfil persistente.
+3. Despues corre el `Run now`/scheduler normal: discovery y claims reutilizan ese navegador "calentado". Si el muro vuelve a imponerse, vuelve a `needs_intervention` (D8) y repetis el unlock de una vez por ventana (mientras dure la cookie de paso).
 
 ### Fallback manual: login en la PC y copia del perfil (SPECS 15)
 

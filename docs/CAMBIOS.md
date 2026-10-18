@@ -5,6 +5,22 @@
 ## Estado
 La autenticación interactiva aún no funciona en producción. Se acumulan problemas en el pipeline noVNC → proxy interno → navegador cliente.
 
+## 2026-10-18 (ter) — Muro anti-bot de la store: probe en vivo + modo "desbloquear store"
+
+- Run now real en g7 (runs #42/#45): discovery toca el muro anti-bot de la store y, por
+  D8, la cuenta pasa a `needs_intervention` (trazas en eventos y CLI auditables).
+- Proof de behavior: probe pasivo en el contenedor con el perfil real (headless) durante
+  90 s: el desafío ("just a moment...") **no cede solo**; exige interacción humana.
+  Conclusión: esperar no sirve y no se puede resolver solo (regla D8 intacta).
+- Nuevo modo de autenticación `4) Desbloquear store`: browser headed en la pantalla
+  remota abre `store.epicgames.com/free-games` con el perfil del usuario; el humano pasa
+  el muro a mano; el criterio de éxito es "ofertas visibles en la página" (`_offers_
+  visible`), momento en que el server cierra con `completed` y el perfil queda con las
+  cookies de paso para discovery/claims. `AuthService.start(mode="unlock")` +
+  `_start_urls` por sesión (start_url del browser); API `mode=unlock` también válida.
+- Tests: unlock mode on screen (start_url correcto), run_auth firma extendida en fakes;
+  suite 153/153.
+
 ## 2026-10-18 (bis) — Login device validado live + UX de código/JSON crudo
 
 - **Validación end-to-end live en g7:** login real desde el PC del usuario por el modo

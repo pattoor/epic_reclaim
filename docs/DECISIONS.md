@@ -103,6 +103,14 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
   acceso legítimo que el usuario creó manualmente y mantiene la regla anti-evasión.
 - **Restricciones:** no se ocultan ni procesan cookies; el perfil es el propio volumen
   `sessions` protegido; nunca exportarlo ni trasmitirlo.
+- **Ajuste (2026-10-18, live):** verificado con un probe pasivo (90 s, muestra cada 5 s)
+  que el muro de la store desde la IP del datacenter **es interactivo y no cede**
+  (esperar más no lo resuelve). Se mantiene la regla de nunca resolverlo
+  automáticamente, así que se sumó el modo **"desbloquear store"**: el usuario humano
+  pasa el muro a mano en el browser headed del server mediante la pantalla remota
+  (el objetivo de éxito pasa a ser "ofertas visibles"); el perfil persistente guarda
+  las cookies de paso y las ejecuciones siguientes las reutilizan sin más. Detalle en
+  README, sección "Desbloquear la store cuando el muro anti-bot truena el run".
 
 ### D9 — Pantalla remota con Xvnc (TigerVNC) en lugar de x11vnc (2026-10-18)
 

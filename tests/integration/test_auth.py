@@ -4,7 +4,7 @@ import time
 from app.database import Database
 from app.domain.models import AccountState
 from app.integrations import epic_oauth
-from app.integrations.auth_browser import AuthOutcome
+from app.integrations.auth_browser import AuthOutcome, FREE_GAMES_URL
 from app.repositories import AccountsRepository
 from app.services.account_service import AccountService
 from app.services.auth_service import AuthService
@@ -266,6 +266,34 @@ def _wait(predicate, timeout_seconds: float = 5):
             return
         time.sleep(0.01)
     raise AssertionError("condition not reached within timeout")
+
+
+# --- Unlock mode (headed store navigation to clear the anti-bot wall, D8/D10) ---
+
+
+def test_auth_unlock_mode_uses_free_games_url_on_screen(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    with database.connect() as connection:
+        account = accounts.create(connection, "Personal")
+
+    screen = FakeScreen(available=True)
+    browser = FakeAuthBrowser(AuthOutcome(success=True))
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=browser,
+        screen=screen,
+        sessions_path=str(tmp_path / "sessions"),
+    )
+    session = auth.start(account.id, mode="unlock")
+
+    assert session.status == "running"
+    assert session.screen_url is not None
+    assert screen.started is True
+    _wait(lambda: session.status == "completed")
+    assert browser.start_url == FREE_GAMES_URL
+    auth._revoke(session.token)
 
 
 # --- Device code flow (D10) ---
@@ -535,7 +563,16 @@ def test_revoke_sets_cooperative_stop_and_closes_screen(tmp_path):
             super().__init__(AuthOutcome(success=True, epic_identity="e"))
             self.should_stop_seen = False
 
-        def run_auth(self, profile_path, display, timeout_seconds, on_intervention=None, should_stop=None):
+        def run_auth(
+            self,
+            profile_path,
+            display,
+            timeout_seconds,
+            on_intervention=None,
+            should_stop=None,
+            start_url=None,
+            headless=False,
+        ):
             self.calls += 1
             browser_started.set()
             deadline = time.time() + 5

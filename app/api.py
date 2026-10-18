@@ -181,7 +181,7 @@ class AuthCodeSubmit(BaseModel):
 @router.post("/accounts/{account_id}/authenticate")
 def authenticate(account_id: int, request: Request, mode: str = "screen"):
     try:
-        if mode not in {"screen", "device", "local"}:
+        if mode not in {"screen", "device", "local", "unlock"}:
             mode = "screen"
         session = _auth_service(request).start(account_id, mode=mode)
     except NotFoundError as exc:

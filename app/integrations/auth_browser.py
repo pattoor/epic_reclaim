@@ -35,6 +35,17 @@ class InteractiveAuthBrowser(ABC):
         pass
 
 
+FREE_GAMES_URL = "https://store.epicgames.com/free-games"
+
+
+def _offers_visible(page) -> bool:
+    """True when the free-games page shows its offers (the anti-bot wall is gone)."""
+    try:
+        return page.query_selector("a[href*='/p/'] [data-testid='OfferTitle']") is not None
+    except Exception:
+        return False
+
+
 class PlaywrightAuthBrowser(InteractiveAuthBrowser):
     """Headed Chromium used only for the interactive login session.
 
@@ -105,6 +116,14 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
                             if on_intervention is not None:
                                 on_intervention(intervention)
                         if _is_logged_in(page):
+                            return AuthOutcome(
+                                success=True,
+                                epic_identity=_extract_identity(page),
+                                display_name=None,
+                            )
+                        if start_url and "/free-games" in start_url and _offers_visible(page):
+                            # Unlock objective: the wall is gone and the user's
+                            # session cookies are settled for the store pages.
                             return AuthOutcome(
                                 success=True,
                                 epic_identity=_extract_identity(page),

@@ -7,7 +7,10 @@ from pathlib import Path
 
 from app.domain.models import AccountState
 from app.integrations import epic_oauth
-from app.integrations.auth_browser import InteractiveAuthBrowser
+from app.integrations.auth_browser import (
+    InteractiveAuthBrowser,
+    FREE_GAMES_URL,
+)
 from app.integrations.remote_screen import RemoteScreen
 from app.repositories import AccountsRepository
 
@@ -42,6 +45,9 @@ class AuthService:
         self._auth_timeout_seconds = auth_timeout_seconds
         self._sessions: dict[str, AuthSession] = {}
         self._stop_events: dict[str, threading.Event] = {}
+        # Optional browser start target per session (unlock mode uses the
+        # free-games URL so the user can clear the store wall by hand).
+        self._start_urls: dict[str, str] = {}
 
     def start(self, account_id: int, mode: str = "screen") -> AuthSession:
         with self._database.connect() as connection:
@@ -60,7 +66,19 @@ class AuthService:
             return self._start_device(account_id)
         if mode == "local":
             return self._start_local(account_id)
+        if mode == "unlock":
+            return self._start_unlock(account_id)
         return self._start_screen(account_id)
+
+    def _start_unlock(self, account_id: int) -> AuthSession:
+        """Headed store session on the remote screen for the user to get
+        through the anti-bot wall manually (D8): the profile saves the
+        cookies/clearance and later runs reuse it."""
+        session = self._start_screen(account_id)
+        if session.auth_url is None and session.screen_url is None:
+            return session
+        self._start_urls[session.token] = FREE_GAMES_URL
+        return session
 
     def _start_screen(self, account_id: int) -> AuthSession:
         if not self._screen.available():
@@ -204,11 +222,13 @@ class AuthService:
                     timeout_seconds=self._auth_timeout_seconds,
                     on_intervention=lambda reason: self._mark_intervention(session, reason),
                     should_stop=stop_event.is_set,
+                    start_url=self._start_urls.get(session.token),
                 )
                 self._complete(session, outcome)
         except Exception as exc:  # pragma: no cover - defensive
             session.status = "failed"
             session.error = str(exc)
+            self._start_urls.pop(session.token, None)
             self._screen.stop()
 
     def _run_exchange(self, session: AuthSession, tokens: dict, stop_event: threading.Event) -> None:
@@ -278,6 +298,7 @@ class AuthService:
                     session.error = outcome.error
         finally:
             self._screen.stop()
+            self._start_urls.pop(session.token, None)
 
     def get(self, token: str) -> AuthSession | None:
         return self._sessions.get(token)
@@ -293,6 +314,7 @@ class AuthService:
     def _revoke(self, token: str) -> None:
         session = self._sessions.pop(token, None)
         event = self._stop_events.pop(token, None)
+        self._start_urls.pop(token, None)
         if event is not None:
             event.set()
         if session is not None:

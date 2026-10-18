@@ -131,7 +131,9 @@ class AuthService:
         if session is None or session.auth_url is None:
             return None
         try:
-            tokens = epic_oauth.exchange_authorization_code(code)
+            tokens = epic_oauth.exchange_authorization_code(
+                epic_oauth.extract_authorization_code(code)
+            )
         except epic_oauth.EpicOAuthError as exc:
             # Keep the session running so the user can retry the code.
             session.error = str(exc)

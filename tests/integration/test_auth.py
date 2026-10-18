@@ -304,6 +304,7 @@ def test_auth_device_mode_completes_via_code(tmp_path, monkeypatch):
     sessions_dir = tmp_path / "sessions"
 
     def fake_exchange_code(code):
+        # The CLI/API accept the whole raw JSON the launcher redirect shows.
         assert code == "ONE-TIME-CODE"
         return {"access_token": "at", "refresh_token": "re", "account_id": "acct-9", "display_name": "Epic User"}
 
@@ -328,7 +329,12 @@ def test_auth_device_mode_completes_via_code(tmp_path, monkeypatch):
         sessions_path=str(sessions_dir),
     )
     session = auth.start(account.id, mode="device")
-    updated = auth.submit_code(session.token, "ONE-TIME-CODE")
+    raw_json = (
+        '{"warning":"Do not share this code with any 3rd party service.",'
+        '"redirectUrl":"https://localhost/launcher/authorized?code=ONE-TIME-CODE",'
+        '"authorizationCode":"ONE-TIME-CODE","exchangeCode":null,"sid":null}'
+    )
+    updated = auth.submit_code(session.token, raw_json)
 
     assert updated.status == "running"
     _wait(lambda: updated.status == "completed")

@@ -112,6 +112,24 @@ def create_exchange_code(access_token: str) -> str:
     return code
 
 
+def extract_authorization_code(raw: str) -> str:
+    """Accept the raw JSON Epic shows and pull the authorizationCode out of it.
+
+    The final redirect lands on localhost/launcher/authorized (the launcher's
+    own callback), so the user's browser just displays Epic's raw JSON. Let
+    the user paste that whole JSON or the bare code.
+    """
+    text = raw.strip()
+    if text.startswith("{"):
+        try:
+            payload = json.loads(text)
+        except ValueError:
+            return text
+        code = payload.get("authorizationCode")
+        return str(code).strip() if code else text
+    return text
+
+
 def save_session_tokens(profile_path: str, tokens: dict) -> None:
     """Persist the refresh token next to the profile (volume-only secret)."""
     directory = Path(profile_path)

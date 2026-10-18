@@ -254,9 +254,11 @@ Una vez resuelto el problema desde el dashboard, la cuenta vuelve a `active` y p
 Alternativa que no usa ni noVNC ni archivos: la CLI pide elegir el modo al autenticar (`1 = pantalla remota, 2 = codigo desde otro dispositivo, 3 = Chromium local`). En modo device:
 
 1. Antes de pedir modo, la CLI intenta una **restauracion silenciosa**: si la cuenta tiene un refresh token guardado, se re-autentica sola (tambien ocurre al inicio de cada run) sin que el usuario haga nada.
-2. El CLI imprime la URL oficial de login de Epic (`epicgames.com/id/login?...`); abrila en el navegador de tu celu o PC (con tus cuentas ya logueadas) y completa MFA/captcha ahi.
-3. Epic muestra un **codigo de un solo uso**; pegalo en la CLI. El servidor lo intercambia por tokens OAuth y asienta la sesion en el perfil del contenedor (Chromium headless sobre `id/exchange`); nada queda en tu dispositivo. En la API: `POST /api/accounts/{id}/authenticate?mode=device` y `POST /api/auth/{token}/code` con `{"code": "..."}`.
-4. El refresh token queda solo en el volumen del server (`data/sessions/<id>/epic_session.json`), nunca en DB, logs ni backups, y permite restauraciones silenciosas futuras.
+2. El CLI imprime la URL oficial de login de Epic (`epicgames.com/id/login?...`); abre en el navegador de tu celu o PC (con tus cuentas ya logueadas) y completa MFA/captcha ahi.
+3. Al terminar el login, Epic **redirige a un callback del launcher** (`localhost/launcher/authorized?code=...`) que tu navegador muestra como **JSON crudo**, a veces con un warning `"Do not share this code with any 3rd party service"`. Eso es lo esperado, no un error. El campo a copiar es **`authorizationCode`** (tambien aparece en la `redirectUrl` como `?code=...`). En el CLI podes pegar el **JSON completo** o solo ese valor (modulo `submit_code` limpia el JSON si lo pegas entero). El codigo es de **un solo uso y vence en ~5 minutos**: generalo y pegalo de una.
+4. En la CLI, la opcion `1) Agregar cuenta` ofrece encadenar el login de una vez ("Autenticar ahora?"): imprime el link y queda esperando `Código / JSON>`.
+5. El CLI/API intercambia el codigo por tokens OAuth y asienta la sesion en el perfil del contenedor (Chromium headless sobre `id/exchange`); nada queda en tu dispositivo. En la API: `POST /api/accounts/{id}/authenticate?mode=device` y `POST /api/auth/{token}/code` con `{"code": "..."}` (acepta JSON crudo o el valor pelado).
+6. El refresh token queda solo en el volumen del server (`data/sessions/<id>/epic_session.json`), nunca en DB, logs ni backups, y permite restauraciones silenciosas futuras.
 
 Usa las credenciales publicas del cliente del Epic Games Launcher (los mismos defaults que legendary/Heroic); no requiere registrar nada en el portal de developers de Epic. CAPTCHA/MFA se completan manualmente en TU navegador (regla D8 intacta).
 

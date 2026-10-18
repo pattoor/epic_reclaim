@@ -5,6 +5,22 @@
 ## Estado
 La autenticación interactiva aún no funciona en producción. Se acumulan problemas en el pipeline noVNC → proxy interno → navegador cliente.
 
+## 2026-10-18 (bis) — Login device validado live + UX de código/JSON crudo
+
+- **Validación end-to-end live en g7:** login real desde el PC del usuario por el modo
+  device → código → tokens → headless `id/exchange` → cuenta `active`. Queda grabado
+  el comportamiento: Epic muestra **JSON crudo** (callback del launcher); a pasarle al
+  server el campo `authorizationCode`, y el código vence en ~5 min (un código viejo
+  dio `authorization_code_not_found`). Documentado en README y D10.
+- `epic_oauth.extract_authorization_code`: acepta el JSON completo que devuelve el
+  redirect del launcher (o el código pelado); `submit_code` lo usa — ya no importa si
+  el usuario pega el JSON entero en la CLI o por API.
+- CLI: `Agregar cuenta` ofrece **encadenar el login** ("Autenticar ahora?");
+  en modo device el prompt aclara el JSON crudo, el campo a copiar y el TTL del código.
+- Historial de movimientos verificado: runs/claims/eventos en CLI (opciones 4/5) y
+  API (`GET /api/runs`, eventos por run); logs de app en `docker logs epic-reclaim`
+  (stdout redactado).
+
 ## 2026-10-18 — Login por codigo desde otro dispositivo + restauracion silenciosa (D10)
 
 - Nuevo modo de autenticacion: la CLI (`Cuentas > Autenticar`) pide modo:

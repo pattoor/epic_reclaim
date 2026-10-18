@@ -22,7 +22,7 @@ def test_cli_creates_account_from_menus(monkeypatch, cli_env):
     from app.database import Database
     from app.repositories import AccountsRepository
 
-    sequence = iter(["2", "1", "Personal", "0", "0"])
+    sequence = iter(["2", "1", "Personal", "n", "0", "0"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(sequence))
 
     assert main() == 0

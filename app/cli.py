@@ -170,6 +170,9 @@ def _add_account(runtime: Runtime) -> None:
     with runtime.database.connect() as connection:
         account = runtime.account_service.create(connection, name)
     print(f"✓ Cuenta #{account.id} ({account.display_name}) creada. Pasá a Autenticar.")
+    follow_up = _input("¿Autenticar ahora? [S/n]> ") or "S"
+    if follow_up.strip().lower() not in {"n", "no"}:
+        _authenticate(runtime, account_id=account.id)
 
 
 def _pick_account_id(runtime: Runtime) -> int | None:
@@ -187,20 +190,21 @@ def _pick_account_id(runtime: Runtime) -> int | None:
     return account_id if any(account.id == account_id for account in accounts) else None
 
 
-def _authenticate(runtime: Runtime) -> None:
-    with runtime.database.connect() as connection:
-        accounts = runtime.account_service.list(connection)
-    if not accounts:
-        print("No hay cuentas.")
-        return
-    for account in accounts:
-        print(f" {account.id}) {account.display_name} [{account.state}]")
-    raw = _input("ID de cuenta a autenticar> ")
-    try:
-        account_id = int(raw)
-    except ValueError:
-        print("ID inválido.")
-        return
+def _authenticate(runtime: Runtime, account_id: int | None = None) -> None:
+    if account_id is None:
+        with runtime.database.connect() as connection:
+            accounts = runtime.account_service.list(connection)
+        if not accounts:
+            print("No hay cuentas.")
+            return
+        for account in accounts:
+            print(f" {account.id}) {account.display_name} [{account.state}]")
+        raw = _input("ID de cuenta a autenticar> ")
+        try:
+            account_id = int(raw)
+        except ValueError:
+            print("ID inválido.")
+            return
 
     # Try the silent token refresh (D10) first: when the account has a
     # stored refresh token no user interaction is needed at all.
@@ -229,11 +233,14 @@ def _authenticate(runtime: Runtime) -> None:
         print("\n" + "=" * 64)
         print("Abrí esta URL en el navegador de tu celu o PC (cuenta linked ya):")
         print(f"  {session.auth_url}")
-        print("Al terminar, Epic te muestra un código de un solo uso.")
-        print("Pegalo acá abajo: el server intercambia el código y completa")
-        print("la sesión solo (nada se guarda en tu dispositivo).")
+        print("Al terminar, Epic te muestra una respuesta JSON cruda (a veces con")
+        print('un warning "Do not share this code..."). ES NORMAL: es el retorno')
+        print("del launcher que tu navegador muestra sin formato. Pegá aquí:")
+        print("  - el JSON COMPLETO, o")
+        print('  - solo el valor del campo "authorizationCode"')
+        print("ATENCIÓN: el código vence en ~5 minutos; generalo y pegalo ya.")
         print("=" * 64)
-        code = _input("Código> ").strip()
+        code = _input("Código / JSON> ").strip()
         if not code:
             runtime.auth_service.revoke(session.token)
             print("Cancelado.")

@@ -170,6 +170,14 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
      la cuenta queda igual que antes (D8) y corresponde login manual.
   3. La identidad del usuario viene del token (`account_id`/`display_name`), no del
      scraping de la página, salvo que este falte.
+  4. **Respuesta esperada (2026-10-18, verificado live):** al terminar el login, Epic
+     redirige al callback del launcher (`localhost/launcher/authorized?code=...`) y el
+     navegador muestra un JSON crudo (a veces con warning "Do not share..."). Es el
+     retorno del launcher sin receptor en el cliente; no es un error. El campo a pasar
+     al server es `authorizationCode` (el CLI/API acepta el JSON completo o el código
+     pelado vía `extract_authorization_code`). El código es de un solo uso y vence en
+     ~5 minutos (verificado: un código de un intento previo dio `authorization_code_
+     not_found` minutos después); generar y pegar de inmediato.
 - **Justificación:** sin registro de app ni secretos propios; login real de Epic en el
   navegador del usuario (nunca pasamos credenciales) y re-auths sin intervención.
   Credenciales del launcher escritas en las constantes de `epic_oauth.py`: son

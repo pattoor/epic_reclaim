@@ -103,3 +103,21 @@ def test_session_tokens_roundtrip(tmp_path):
 
 def test_load_refresh_token_missing_profile_is_none(tmp_path):
     assert epic_oauth.load_refresh_token(str(tmp_path)) is None
+
+
+def test_extract_authorization_code_accepts_raw_launcher_json():
+    raw = (
+        '{"warning":"Do not share this code with any 3rd party service. It allows full access to your Epic account.",'
+        '"redirectUrl":"https://localhost/launcher/authorized?code=abc123",'
+        '"authorizationCode":"abc123","exchangeCode":null,"sid":null}'
+    )
+    assert epic_oauth.extract_authorization_code(raw) == "abc123"
+
+
+def test_extract_authorization_code_passes_plain_code_through():
+    assert epic_oauth.extract_authorization_code(" abc123 ") == "abc123"
+
+
+def test_extract_authorization_code_unknown_json_returns_as_is():
+    raw = '{"other": "value"}'
+    assert epic_oauth.extract_authorization_code(raw) == raw

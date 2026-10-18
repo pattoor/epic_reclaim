@@ -301,6 +301,14 @@ class NoVNCProvider(RemoteScreen):
                 # negotiate; force classic VNC auth so the password matches.
                 "-SecurityTypes",
                 "VncAuth",
+                # Auth UX retries legitimately while the user reconnects; the
+                # default blacklist turns a few failures into a persistent
+                # "Too many security failures" ban (observed live) that then
+                # rejects every retry. Security relies on the ephemeral
+                # password plus localhost binding, not on failure throttling,
+                # so disable the blacklist threshold entirely.
+                "-BlacklistThreshold",
+                "0",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

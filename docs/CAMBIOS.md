@@ -11,8 +11,10 @@ La autenticación interactiva aún no funciona en producción. Se acumulan probl
   `x11vnc` entra en busy-loop de userspace en Debian 13 (60–95 % CPU, nunca `accept()`,
   backlog acumulado), incluso con stack aislado y puertos libres. No era código de la app.
 - `NoVNCProvider` migrado de Xvfb+x11vnc+websockify a **Xvnc (TigerVNC) + websockify**;
-  passfile generado con `vncpasswd -f` (mismo formato obfuscated). Valide aislado: el
-  banner `RFB 003.008` responde inmediatamente.
+  passfile generado con `openssl enc -des-ecb` (Debian 13 no trae `vncpasswd`; formato
+  obfuscated TigerVNC idéntico, con la clave fija d3des bit-revertida por byte porque d3des
+  lee los bits de la clave LSB-first). Valide aislado: el banner `RFB 003.008` responde
+  inmediatamente y el e2e de noVNC autentica (`Connected (unencrypted) ...`).
 - Cleanup de huérfanos extiende el patrón `pkill -f` a `Xvnc` y remueve locks/socket del
   display (`/tmp/.X99-lock`, `/tmp/.X11-unix/X99`) para evitar "Server is already active
   for display" tras cierres forzados.

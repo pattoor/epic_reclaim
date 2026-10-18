@@ -116,10 +116,14 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
   `Xvnc` de TigerVNC (servidor X + servidor VNC en un solo proceso; Xvfb y x11vnc
   desaparecen), (c) otra capa de escritorio remota (KasmVNC, xrdp).
 - **Decisión:** (b). Valide aislado en el contenedor: `Xvnc :96 -geometry 1280x800
-  -depth 24 -rfbport <port> -PasswordFile <vncpasswd -f> -localhost` responde el banner
+  -depth 24 -rfbport <port> -PasswordFile <passfile> -localhost` responde el banner
   `RFB 003.008` inmediatamente. `NoVNCProvider` pasa de 3 procesos (Xvfb+x11vnc+
-  websockify) a 2 (Xvnc+websockify); el passfile se genera con `vncpasswd -f`
-  (mismo formato que `-rfbauth`). El cleanup de procesos huérfanos y locks de display
+  websockify) a 2 (Xvnc+websockify); el passfile se genera con `openssl enc -des-ecb`
+  con la clave fija d3des bit-revertida por byte (d3des computa su schedule de clave
+  LSB-first, equivalente a DES estándar con cada byte de clave invertido; Debian 13
+  no trae `vncpasswd`). Verificación end-to-end: handshake RFB 3.8 VncAuth contra el
+  Xvnc vivo da `result=0`, y el e2e de navegador (Chromium + noVNC) autentica
+  `Connected (unencrypted)`. El cleanup de procesos huérfanos y locks de display
   (`/tmp/.X99-lock`, `/tmp/.X11-unix/X99`) cubre el nuevo servidor.
 - **Justificación:** stack estándar probado, un proceso menos, y elimina la dependencia
   de un binario que falla como busy-loop en el entorno objetivo.

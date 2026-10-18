@@ -100,28 +100,26 @@ class NoVNCProvider(RemoteScreen):
         self._last_error: str | None = None
 
     def _write_passfile(self, password: str, passfile: str) -> None:
-        """Write an 8-byte obfuscated VNC password file (libvncserver format).
+        """Write the 8-byte obfuscated VNC password file (TigerVNC format).
 
-        Debian 13 dropped the `vncpasswd` utility, so the obfuscated password
-        is produced with `openssl`: key = first 8 password bytes with every
-        bit reversed, encrypting 8 zero bytes in DES-ECB with no padding
-        (exactly what vncpasswd -f produces). Cross-checked against
-        pycryptodome. Falls back to the legacy provider for OpenSSL 3.
+        Debian 13 ships no `vncpasswd` utility, so the obfuscated password is
+        produced with `openssl`: DES-ECB (no padding) of the password padded
+        to 8 zero bytes, encrypted with TigerVNC's fixed obfuscation key
+        (rfb/obfuscate.cxx: d3desObfuscationKey = {23,82,107,6,35,78,88,7}).
+        d3des computes its key schedule from LSB-first bit numbering, which
+        is equivalent to standard DES with every key byte bit-reversed, so
+        the key handed to openssl is the bit-reversed fixed key.
+        Falls back to the legacy provider for OpenSSL 3.
         """
-        key = bytearray(password.encode("utf-8")[:8].ljust(8, b"\x00"))
-        for index, byte in enumerate(key):
-            reversed_bits = 0
-            for _ in range(8):
-                reversed_bits = (reversed_bits << 1) | (byte & 1)
-                byte >>= 1
-            key[index] = reversed_bits
-
-        command = ["openssl", "enc", "-des-ecb", "-K", bytes(key).hex().upper(), "-nopad"]
-        result = subprocess.run(command, input=b"\x00" * 8, capture_output=True)
+        fixed = bytes((23, 82, 107, 6, 35, 78, 88, 7))
+        openssl_key = bytes(int(f"{byte:08b}"[::-1], 2) for byte in fixed)
+        plaintext = password.encode("utf-8")[:8].ljust(8, b"\x00")
+        command = ["openssl", "enc", "-des-ecb", "-K", openssl_key.hex().upper(), "-nopad"]
+        result = subprocess.run(command, input=plaintext, capture_output=True)
         if not result.stdout or len(result.stdout) != 8:
             result = subprocess.run(
                 command + ["-provider", "legacy", "-provider", "default"],
-                input=b"\x00" * 8,
+                input=plaintext,
                 capture_output=True,
             )
         if len(result.stdout) != 8:
@@ -298,6 +296,11 @@ class NoVNCProvider(RemoteScreen):
                 "-PasswordFile",
                 passfile,
                 "-localhost",
+                # TigerVNC 1.15 defaults to the modern RSA-AES security types
+                # (RA2/RA2_256), which the URL-based noVNC client does not
+                # negotiate; force classic VNC auth so the password matches.
+                "-SecurityTypes",
+                "VncAuth",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,

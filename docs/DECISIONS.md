@@ -129,3 +129,17 @@ Estado: **adoptadas**. Contexto: la auditoría de octubre 2026 concluyó que el 
   de un binario que falla como busy-loop en el entorno objetivo.
 - **Restricciones:** Dockerfile instala `tigervnc-standalone-server` en lugar de
   `xvfb`+`x11vnc`; en modoheaded Windows/macOS sigue sin VNC (`LocalHeadedScreen`).
+- **Ajuste sobre la decisión (mismo día, live g7):** el primer intento real daba
+  "Failed to connect to server" con HTTP/WS sanos. Hallazgos verificados:
+  (1) durante los primeros segundos Xvnc acepta TCP pero responde `RFB 003.003` +
+  tipo nulo (rechazo), así que esperar el puerto TCP no basta como readiness;
+  (2) TigerVNC cuenta toda negociación abandonada como *security failure* por
+  dirección y banea tras N fallos ("Too many security failures"): como todos los
+  clientes llegan por websockify (127.0.0.1), un solo abandono bloquea a todos.
+  Por eso la sonda de readiness de `NoVNCProvider.start()` completa un handshake
+  VncAuth real (challenge-response DES vía `openssl`, mismo password del passfile;
+  la auth exitosa resetea el contador) en vez de leer solo el banner, y NO se
+  fuerza `-BlacklistThreshold 0` (probarlo lo confirmó: un abandono banearía al
+  instante; el default 5 tolera pestañas cerradas a medias). En g7 verificado:
+  la primera conexión del navegador tras el arranque conecta de una, y
+  reconexiones rápidas repetidas no degradan el servidor.

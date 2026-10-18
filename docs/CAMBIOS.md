@@ -97,3 +97,22 @@ Validación técnica en g7 (18/10/2026):
   login chequea cada 3 s y cierra Chromium con gracia por el propio thread de Playwright.
 
 Login real del usuario (éxito y timeout) queda como paso manual documentado en R3/R6.
+
+## 2026-10-18 (tarde) — Fix "Failed to connect to server" en noVNC (g7)
+
+Causa raíz doble, diagnosticada con chrome-devtools-mcp (consola real del navegador)
+más sondas TCP/WS/RFB dentro del contenedor:
+
+1. **Readiness de Xvnc:** acepta TCP desde el arranque pero rechaza handshakes
+   (`RFB 003.003` + tipo nulo) durante los primeros segundos. El provider soltaba la
+   URL cuando el puerto abría → la primera conexión del navegador fallaba.
+2. **Blacklist de TigerVNC:** toda negociación RFB abandonada es un *security
+   failure* por dirección; al compartir 127.0.0.1 vía websockify, unos pocos
+   abandonos banearon el servidor ("Too many security failures") y persistieron los
+   reintentos.
+
+Cambios (commit `0b4b068`):
+- `NoVNCProvider.start()` ahora espera un **handshake VncAuth completo** local
+  (banner 3.8 + challenge/response DES con el password de la sesión vía `openssl`).
+- No se fuerza `-BlacklistThreshold 0`; queda el default de TigerVNC.
+- Tests actualizados (`test_remote_screen.py`); suite 131/131.

@@ -134,9 +134,9 @@ def _accounts_menu(runtime: Runtime) -> None:
                 f"[{account.state}]{flag} order={account.processing_order}"
             )
         print("\n 1) Agregar cuenta")
-        print(" 2) Autenticar cuenta")
+        print(" 2) Autenticar cuenta (restauración silenciosa / pantalla / código / local)")
         print(" 3) Editar cuenta (nombre / orden / enabled)")
-        print(" 4) Resolver intervención")
+        print(" 4) Resolver intervención (desmarca la pausa; el login es la opción 2)")
         print(" 5) Detener sesión de autenticación activa")
         print(" 6) Eliminar permanentemente")
         print(" 7) Login local (fallback: PC + copiar perfil)")
@@ -330,6 +330,12 @@ def _resolve_intervention(runtime: Runtime) -> None:
     with runtime.database.connect() as connection:
         resolved = runtime.account_service.resolve_intervention(connection, account_id)
     print(f"✓ Cuenta #{resolved.id} vuelve a {resolved.state}.")
+    print("Esto SOLO desmarca la intervención (p. ej. si ya la resolviste por afuera).")
+    print("Si lo que necesita es un LOGIN, usá la opción 2 (Autenticar cuenta): ahí")
+    print("se prueba restauración silenciosa o pedís el link de pantalla/código.")
+    follow_up = _input("¿Autenticar ahora? [s/N]> ")
+    if follow_up.strip().lower() in {"s", "si", "sí", "y", "yes"}:
+        _authenticate(runtime, account_id=account_id)
 
 
 def _stop_auth_session(runtime: Runtime) -> None:

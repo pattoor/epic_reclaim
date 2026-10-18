@@ -139,6 +139,7 @@ def _accounts_menu(runtime: Runtime) -> None:
         print(" 4) Resolver intervención")
         print(" 5) Detener sesión de autenticación activa")
         print(" 6) Eliminar permanentemente")
+        print(" 7) Login local (fallback: PC + copiar perfil)")
         print(" 0) Volver")
         choice = _input("Cuentas> ")
         if choice == "1":
@@ -153,6 +154,8 @@ def _accounts_menu(runtime: Runtime) -> None:
             _stop_auth_session(runtime)
         elif choice == "6":
             _delete_account(runtime)
+        elif choice == "7":
+            _local_login_fallback()
         elif choice in {"0", "q", "Q"}:
             return
         else:
@@ -229,6 +232,26 @@ def _authenticate(runtime: Runtime) -> None:
         reason = current.error or "timeout esperando el login"
         print(f"✗ {reason}")
         print("Resolvé el problema desde el menú y volvé a autenticar.")
+
+
+def _local_login_fallback() -> None:
+    """Instructions for the documented manual login fallback (SPECS 15).
+
+    The server cannot spawn processes on the user's PC, so this prints the
+    exact command to run there; the resulting profile is copied explicitly
+    by the user to the server volume.
+    """
+    print("\n--- Login local (fallback manual) ---")
+    print("En tu PC corré UNO de estos dos comandos (repo epic_reclaim):")
+    print(" a) Perfil persistente (recomendado: Google/Epic quedan enlazados):")
+    print("      py tools\\local_login.py")
+    print(" b) Perfil aislado (arranca de cero):")
+    print("      py tools\\local_login.py --fresh")
+    print("Logueate en la ventana de Chrome que se abre y cerrá Chrome.")
+    print("Luego copiá el perfil al volumen del server (vía Tailscale/scp) y")
+    print("dispará 'Autenticar cuenta': detecta la sesión y activa la cuenta.")
+    print("Nunca uses el perfil diario: expondría sesiones no relacionadas.")
+    return
 
 
 def _edit_account(runtime: Runtime) -> None:

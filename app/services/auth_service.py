@@ -38,6 +38,7 @@ class AuthService:
         self._sessions_path = Path(sessions_path)
         self._auth_timeout_seconds = auth_timeout_seconds
         self._sessions: dict[str, AuthSession] = {}
+        self._stop_events: dict[str, threading.Event] = {}
 
     def start(self, account_id: int) -> AuthSession:
         with self._database.connect() as connection:
@@ -82,6 +83,7 @@ class AuthService:
                 error=last_error,
             )
         token = secrets.token_urlsafe(24)
+        stop_event = threading.Event()
         session = AuthSession(
             token=token,
             account_id=account_id,
@@ -92,13 +94,19 @@ class AuthService:
             vnc_password=vnc_password,
         )
         self._sessions[session.token] = session
+        self._stop_events[session.token] = stop_event
         thread = threading.Thread(
-            target=self._run_browser, args=(session, display), daemon=True
+            target=self._run_browser, args=(session, display, stop_event), daemon=True
         )
         thread.start()
         return session
 
-    def _run_browser(self, session: AuthSession, display: str | None) -> None:
+    def _run_browser(
+        self,
+        session: AuthSession,
+        display: str | None,
+        stop_event: threading.Event,
+    ) -> None:
         try:
             with self._database.connect() as connection:
                 account = self._repository.get(connection, session.account_id)
@@ -108,6 +116,7 @@ class AuthService:
                     display=display,
                     timeout_seconds=self._auth_timeout_seconds,
                     on_intervention=lambda reason: self._mark_intervention(session, reason),
+                    should_stop=stop_event.is_set,
                 )
                 self._complete(session, outcome)
         except Exception as exc:  # pragma: no cover - defensive
@@ -175,6 +184,9 @@ class AuthService:
 
     def _revoke(self, token: str) -> None:
         session = self._sessions.pop(token, None)
+        event = self._stop_events.pop(token, None)
+        if event is not None:
+            event.set()
         if session is not None:
             self._screen.stop()
 

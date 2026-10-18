@@ -1,3 +1,4 @@
+import threading
 import time
 
 from app.database import Database
@@ -264,3 +265,52 @@ def _wait(predicate, timeout_seconds: float = 5):
             return
         time.sleep(0.01)
     raise AssertionError("condition not reached within timeout")
+
+
+def test_revoke_sets_cooperative_stop_and_closes_screen(tmp_path):
+    database = _database(tmp_path)
+    accounts = AccountsRepository()
+    service = AccountService(accounts, str(tmp_path / "sessions"))
+    browser_started = threading.Event()
+    stop_seen = []
+
+    class CooperativeBrowser(FakeAuthBrowser):
+        def __init__(self):
+            super().__init__(AuthOutcome(success=True, epic_identity="e"))
+            self.should_stop_seen = False
+
+        def run_auth(self, profile_path, display, timeout_seconds, on_intervention=None, should_stop=None):
+            self.calls += 1
+            browser_started.set()
+            deadline = time.time() + 5
+            while time.time() < deadline:
+                if should_stop is not None and should_stop():
+                    self.should_stop_seen = True
+                    stop_seen.append(True)
+                    return AuthOutcome(success=False, error="revoked by user")
+                time.sleep(0.05)
+            return self.outcome
+
+    with database.connect() as connection:
+        account = service.create(connection, "Personal")
+
+    screen = FakeScreen(available=True)
+    browser = CooperativeBrowser()
+    auth = AuthService(
+        database=database,
+        repository=accounts,
+        browser=browser,
+        screen=screen,
+        sessions_path=str(tmp_path / "sessions"),
+        auth_timeout_seconds=10,
+    )
+    session = auth.start(account.id)
+    assert session.status == "running"
+    assert browser_started.wait(timeout=5)
+    auth.revoke(session.token)
+    deadline = time.time() + 3
+    while time.time() < deadline and not stop_seen:
+        time.sleep(0.05)
+    assert browser.should_stop_seen is True
+    assert screen.stopped is True
+    assert auth.get(session.token) is None

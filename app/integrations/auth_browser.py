@@ -24,6 +24,7 @@ class InteractiveAuthBrowser(ABC):
         display: str | None,
         timeout_seconds: int,
         on_intervention: Callable[[str], None] | None = None,
+        should_stop: Callable[[], bool] | None = None,
     ) -> AuthOutcome:
         pass
 
@@ -47,6 +48,7 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
         display: str | None,
         timeout_seconds: int,
         on_intervention: Callable[[str], None] | None = None,
+        should_stop: Callable[[], bool] | None = None,
     ) -> AuthOutcome:
         try:
             from playwright.sync_api import sync_playwright
@@ -75,6 +77,8 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
                     deadline = time.monotonic() + timeout_seconds
                     while time.monotonic() < deadline:
                         time.sleep(3)
+                        if should_stop is not None and should_stop():
+                            return AuthOutcome(success=False, error="revoked by user")
                         body = page.inner_text("body")
                         lowered = body.lower()
                         current_intervention = _intervention_kind(lowered)

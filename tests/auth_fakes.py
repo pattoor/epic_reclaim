@@ -18,6 +18,7 @@ class FakeAuthBrowser(InteractiveAuthBrowser):
         display: str | None,
         timeout_seconds: int,
         on_intervention=None,
+        should_stop=None,
     ) -> AuthOutcome:
         self.calls += 1
         self.profile_path = profile_path
@@ -72,6 +73,7 @@ class BlockingAuthBrowser(InteractiveAuthBrowser):
         display: str | None,
         timeout_seconds: int,
         on_intervention=None,
+        should_stop=None,
     ) -> AuthOutcome:
         if on_intervention is not None:
             on_intervention("captcha")

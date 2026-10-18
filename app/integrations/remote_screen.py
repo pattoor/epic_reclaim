@@ -220,6 +220,79 @@ class NoVNCProvider(RemoteScreen):
             time.sleep(self._startup_poll_interval)
         return False
 
+    def _recv_exact(self, sock, size: int) -> bytes:
+        data = b""
+        while len(data) < size:
+            piece = sock.recv(size - len(data))
+            if not piece:
+                raise ConnectionError("connection closed by Xvnc")
+            data += piece
+        return data
+
+    def _rfb_des_response(self, challenge: bytes, password: str) -> bytes:
+        """VNC challenge-response (d3des semantics) via openssl.
+
+        d3des reads its key LSB-first, which equals standard DES-ECB with
+        every key byte bit-reversed (same trick as _write_passfile).
+        """
+        pw = password.encode("utf-8")[:8].ljust(8, b"\x00")
+        key = bytes(int(f"{byte:08b}"[::-1], 2) for byte in pw)
+        command = ["openssl", "enc", "-des-ecb", "-K", key.hex().upper(), "-nopad"]
+        result = subprocess.run(command, input=challenge, capture_output=True)
+        if len(result.stdout) != 16:
+            result = subprocess.run(
+                command + ["-provider", "legacy", "-provider", "default"],
+                input=challenge,
+                capture_output=True,
+            )
+        if len(result.stdout) != 16:
+            raise RuntimeError("openssl des-ecb failed for RFB probe")
+        return result.stdout
+
+    def _rfb_probe_is_ready(self, password: str) -> bool:
+        """True once Xvnc completes a full VncAuth handshake.
+
+        Right after launch Xvnc may refuse handshakes (RFB 003.003 plus a
+        null security type) for a few seconds. Simply reading the banner and
+        closing is NOT safe: TigerVNC counts any connection that abandons
+        security negotiation as a failure toward its per-address blacklist,
+        which briefly bans 127.0.0.1 (every websockify client) and makes the
+        first browser connection fail with "Too many security failures".
+        Completing the auth probe is harmless (loopback only) and a
+        successful auth resets the failure counter.
+        """
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2)
+                sock.connect(("127.0.0.1", self._vnc_port))
+                banner = self._recv_exact(sock, 12)
+                if banner != b"RFB 003.008\n":
+                    return False
+                sock.sendall(b"RFB 003.008\n")
+                count = self._recv_exact(sock, 1)[0]
+                if count == 0:
+                    return False
+                security_types = self._recv_exact(sock, count)
+                if 2 not in security_types:
+                    return False
+                sock.sendall(b"\x02")
+                challenge = self._recv_exact(sock, 16)
+                response = self._rfb_des_response(challenge, password)
+                sock.sendall(response)
+                result = self._recv_exact(sock, 4)
+                return result == b"\x00\x00\x00\x00"
+        except (OSError, ConnectionError, RuntimeError) as exc:
+            logger.debug("rfb_probe_retry: %s", exc)
+            return False
+
+    def _wait_for_rfb_ready(self, password: str, timeout_seconds: float) -> bool:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
+            if self._rfb_probe_is_ready(password):
+                return True
+            time.sleep(self._startup_poll_interval)
+        return False
+
     def _check_processes_alive(self) -> tuple[bool, str | None]:
         for process, name in zip(self._processes, ("Xvnc", "websockify")):
             if process.poll() is not None:
@@ -301,14 +374,6 @@ class NoVNCProvider(RemoteScreen):
                 # negotiate; force classic VNC auth so the password matches.
                 "-SecurityTypes",
                 "VncAuth",
-                # Auth UX retries legitimately while the user reconnects; the
-                # default blacklist turns a few failures into a persistent
-                # "Too many security failures" ban (observed live) that then
-                # rejects every retry. Security relies on the ephemeral
-                # password plus localhost binding, not on failure throttling,
-                # so disable the blacklist threshold entirely.
-                "-BlacklistThreshold",
-                "0",
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
@@ -333,8 +398,11 @@ class NoVNCProvider(RemoteScreen):
             self.stop()
             return None
 
-        if not self._wait_for_port(self._vnc_port, self._startup_timeout_seconds):
-            self._last_error = f"Xvnc did not start listening on port {self._vnc_port}; stderr: {self._collect_stderrs()}"
+        if not self._wait_for_rfb_ready(password, self._startup_timeout_seconds):
+            self._last_error = (
+                f"Xvnc did not complete the RFB VncAuth handshake on port {self._vnc_port}; "
+                f"stderr: {self._collect_stderrs()}"
+            )
             logger.error(self._last_error)
             self.stop()
             return None

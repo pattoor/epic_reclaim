@@ -36,6 +36,10 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
         "app.integrations.remote_screen.NoVNCProvider._wait_for_port",
         lambda self, port, timeout: True,
     )
+    monkeypatch.setattr(
+        "app.integrations.remote_screen.NoVNCProvider._wait_for_rfb_ready",
+        lambda self, password, timeout: True,
+    )
 
     provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
     assert provider.start("session-password") == ":99"
@@ -48,6 +52,7 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
     assert "-localhost" in xvnc
     assert "-rfbport" in xvnc
     assert "-SecurityTypes" in xvnc and "VncAuth" in xvnc
+    assert "-BlacklistThreshold" not in xvnc
     assert "-nopw" not in xvnc
     assert "--web" in websockify
     assert str(tmp_path) in websockify
@@ -79,7 +84,7 @@ def test_novnc_reports_missing_novnc_dir(monkeypatch, tmp_path):
     assert diagnostics["novnc_web_dir_exists"] is False
 
 
-def test_novnc_fails_when_port_does_not_listen(monkeypatch, tmp_path):
+def test_novnc_fails_when_xvnc_never_answers_rfb_banner(monkeypatch, tmp_path):
     commands = []
 
     class Process:
@@ -98,6 +103,6 @@ def test_novnc_fails_when_port_does_not_listen(monkeypatch, tmp_path):
     )
     monkeypatch.setattr("app.integrations.remote_screen.subprocess.Popen", lambda command, **kwargs: (commands.append(command) or Process()))
 
-    provider = NoVNCProvider(novnc_web_dir=str(tmp_path))
+    provider = NoVNCProvider(novnc_web_dir=str(tmp_path), startup_timeout_seconds=0.4, startup_poll_interval=0.1)
     assert provider.start("session-password") is None
-    assert "did not start listening" in (provider.diagnostics()["last_error"] or "")
+    assert "vncauth handshake" in (provider.diagnostics()["last_error"] or "").lower()

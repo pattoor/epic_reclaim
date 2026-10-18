@@ -47,6 +47,7 @@ def test_novnc_uses_password_file_and_serves_client(monkeypatch, tmp_path):
     assert "-PasswordFile" in xvnc
     assert "-localhost" in xvnc
     assert "-rfbport" in xvnc
+    assert "-SecurityTypes" in xvnc and "VncAuth" in xvnc
     assert "-nopw" not in xvnc
     assert "--web" in websockify
     assert str(tmp_path) in websockify

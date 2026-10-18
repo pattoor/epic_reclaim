@@ -19,6 +19,12 @@ La autenticación interactiva aún no funciona en producción. Se acumulan probl
   display (`/tmp/.X99-lock`, `/tmp/.X11-unix/X99`) para evitar "Server is already active
   for display" tras cierres forzados.
 - Dockerfile: `tigervnc-standalone-server` reemplaza `xvfb`+`x11vnc`. Suite 126/126 verde.
+- **2026-10-18 (bis):** passfile VNC corregido d3des → auth VncAuth OK en noVNC (D9 ajustado).
+  Nuevo caso de recuperación: `clear_stale_profile_locks` (nuevo módulo
+  `app/integrations/profile_locks.py`, usado por los 3 `launch_persistent_context`) borra
+  `SingletonLock/Cookie/Socket` huérfanos del perfil tras un cierre brusco o rebuild;
+  sin esto el Chromium no arranca ("profile appears to be in use by another Chromium
+  process"). Suite 131/131 verde.
 
 ## Historial de cambios del día
 

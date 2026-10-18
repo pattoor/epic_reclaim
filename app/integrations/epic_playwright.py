@@ -16,6 +16,7 @@ from app.integrations.epic_adapter import (
     GameCandidate,
     Outcome,
 )
+from app.integrations.profile_locks import clear_stale_profile_locks
 
 FREE_GAMES_PATH = "https://store.epicgames.com/free-games"
 
@@ -141,8 +142,10 @@ class PlaywrightEpicAdapter(EpicAdapter):
                 if profile_account_id is not None:
                     # Reuse the user's own persistent profile (cookies created
                     # by the manual interactive login) for store browsing.
+                    profile = self._profile_path(profile_account_id)
+                    clear_stale_profile_locks(profile)
                     context = playwright.chromium.launch_persistent_context(
-                        user_data_dir=str(self._profile_path(profile_account_id)),
+                        user_data_dir=str(profile),
                         headless=True,
                     )
                     try:
@@ -221,8 +224,10 @@ class PlaywrightEpicAdapter(EpicAdapter):
     def open_account_session(self, account_id: int) -> AccountSession:
         playwright = self._import_playwright()
         try:
+            profile = self._profile_path(account_id)
+            clear_stale_profile_locks(profile)
             context = playwright.chromium.launch_persistent_context(
-                user_data_dir=str(self._profile_path(account_id)),
+                user_data_dir=str(profile),
                 headless=True,
             )
             return PlaywrightSession(context, playwright)

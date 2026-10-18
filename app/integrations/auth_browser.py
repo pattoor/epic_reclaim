@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Callable
 
+from app.integrations.profile_locks import clear_stale_profile_locks
+
 
 @dataclass(frozen=True)
 class AuthOutcome:
@@ -55,6 +57,7 @@ class PlaywrightAuthBrowser(InteractiveAuthBrowser):
         except ImportError as exc:
             return AuthOutcome(success=False, error="playwright not installed")
 
+        clear_stale_profile_locks(profile_path)
         env = {}
         if display:
             env["DISPLAY"] = display
